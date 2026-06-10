@@ -1,3 +1,4 @@
+import logging
 from typing import cast
 
 from aiogram import F, Router
@@ -22,6 +23,7 @@ from app.services.content import ContentPipeline, format_card, item_keyboard
 from app.services.youtube import YouTubeService
 
 router = Router()
+logger = logging.getLogger(__name__)
 
 
 class Form(StatesGroup):
@@ -350,6 +352,15 @@ async def process_inbox_message(
     settings: Settings,
 ) -> None:
     if message.chat.id != settings.telegram_inbox_chat_id:
+        if message.chat.type in {"group", "supergroup"}:
+            logger.info(
+                "Ignored Telegram chat id=%s title=%r type=%s forum=%s migrated_from=%s",
+                message.chat.id,
+                message.chat.title,
+                message.chat.type,
+                getattr(message.chat, "is_forum", None),
+                message.migrate_from_chat_id,
+            )
         return
     content = message.text or message.caption or ""
     url = telegram_message_url(message)
