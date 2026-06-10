@@ -44,6 +44,15 @@ def callback_message(callback: CallbackQuery) -> Message:
     return callback.message
 
 
+def telegram_message_url(message: Message) -> str:
+    if message.chat.username:
+        return f"https://t.me/{message.chat.username}/{message.message_id}"
+    chat_id = str(message.chat.id)
+    if message.chat.type == "supergroup" and chat_id.startswith("-100"):
+        return f"https://t.me/c/{chat_id[4:]}/{message.message_id}"
+    return ""
+
+
 @router.message(CommandStart())
 async def start(message: Message, settings: Settings) -> None:
     if not allowed(message.from_user.id if message.from_user else None, settings):
@@ -333,8 +342,15 @@ async def process_inbox_message(
     if message.chat.id != settings.telegram_inbox_chat_id:
         return
     content = message.text or message.caption or ""
-    username = message.chat.username
-    url = f"https://t.me/{username}/{message.message_id}" if username else ""
+    url = telegram_message_url(message)
+    if not url:
+        try:
+            if message.bot is None:
+                raise RuntimeError("Telegram bot context is unavailable")
+            chat = await message.bot.get_chat(message.chat.id)
+            url = chat.invite_link or ""
+        except Exception:
+            url = ""
     await pipeline.ingest(
         session,
         NormalizedItem(
