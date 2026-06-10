@@ -1,6 +1,7 @@
 from typing import cast
 
 from aiogram import F, Router
+from aiogram.exceptions import TelegramAPIError
 from aiogram.filters import CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
@@ -324,13 +325,22 @@ async def publish_item(
     if not allowed(callback.from_user.id, settings):
         await callback.answer("Нет доступа", show_alert=True)
         return
-    item, published = await pipeline.publish(
-        session, int(callback_data(callback).split(":", 1)[1])
-    )
-    await callback_message(callback).edit_text(
-        format_card(item, sent=True), reply_markup=item_keyboard(item.id, item.url, sent=True)
-    )
-    await callback.answer("Передано в Sumify" if published else "Уже было передано")
+    await callback.answer("Передаю в Sumify…")
+    try:
+        item, published = await pipeline.publish(
+            session, int(callback_data(callback).split(":", 1)[1])
+        )
+        await callback_message(callback).edit_text(
+            format_card(item, sent=True),
+            reply_markup=item_keyboard(item.id, item.url, sent=True),
+        )
+        if not published:
+            await callback_message(callback).answer("Этот материал уже был передан.")
+    except TelegramAPIError:
+        await session.rollback()
+        await callback_message(callback).answer(
+            "❌ Не удалось передать материал в Sumify. Проверьте права бота и повторите."
+        )
 
 
 async def process_inbox_message(
