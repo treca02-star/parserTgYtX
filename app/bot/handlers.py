@@ -324,8 +324,7 @@ async def publish_item(
     await callback.answer("Передано в Sumify" if published else "Уже было передано")
 
 
-@router.channel_post()
-async def inbox_post(
+async def process_inbox_message(
     message: Message,
     pipeline: ContentPipeline,
     session: AsyncSession,
@@ -349,3 +348,23 @@ async def inbox_post(
             source_message_id=message.message_id,
         ),
     )
+
+
+@router.channel_post()
+async def inbox_channel_post(
+    message: Message,
+    pipeline: ContentPipeline,
+    session: AsyncSession,
+    settings: Settings,
+) -> None:
+    await process_inbox_message(message, pipeline, session, settings)
+
+
+@router.message()
+async def inbox_group_message(
+    message: Message,
+    pipeline: ContentPipeline,
+    session: AsyncSession,
+    settings: Settings,
+) -> None:
+    await process_inbox_message(message, pipeline, session, settings)
