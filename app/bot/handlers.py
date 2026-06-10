@@ -272,7 +272,7 @@ async def menu_stats(
         "<b>📊 Статистика</b>\n\n"
         f"Новые: {counts.get('new', 0)}\n"
         f"Отфильтровано: {counts.get('filtered', 0)}\n"
-        f"Передано в Sumify: {counts.get('sent', 0)}",
+        f"Передано в обработку: {counts.get('sent', 0)}",
         reply_markup=back_menu(),
     )
     await callback.answer()
@@ -311,7 +311,7 @@ async def menu_settings(callback: CallbackQuery, settings: Settings) -> None:
     await callback_message(callback).edit_text(
         "<b>⚙️ Настройки</b>\n\n"
         f"Входящий канал: <code>{settings.telegram_inbox_chat_id}</code>\n"
-        f"Канал Sumify: <code>{settings.telegram_sumify_chat_id}</code>\n\n"
+        f"Группа обработки: <code>{settings.telegram_output_chat_id}</code>\n\n"
         "Эти значения меняются в <code>.env</code> на сервере.",
         reply_markup=back_menu(),
     )
@@ -325,7 +325,7 @@ async def publish_item(
     if not allowed(callback.from_user.id, settings):
         await callback.answer("Нет доступа", show_alert=True)
         return
-    await callback.answer("Передаю в Sumify…")
+    await callback.answer("Передаю в обработку…")
     try:
         item, published = await pipeline.publish(
             session, int(callback_data(callback).split(":", 1)[1])
@@ -339,7 +339,7 @@ async def publish_item(
     except TelegramAPIError:
         await session.rollback()
         await callback_message(callback).answer(
-            "❌ Не удалось передать материал в Sumify. Проверьте права бота и повторите."
+            "❌ Не удалось передать материал. Проверьте права бота и повторите."
         )
 
 

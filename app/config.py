@@ -11,7 +11,7 @@ class Settings(BaseSettings):
     telegram_bot_token: str
     telegram_owner_id: int
     telegram_inbox_chat_id: int
-    telegram_sumify_chat_id: int
+    telegram_output_chat_id: int
     telegram_webhook_secret: str = Field(min_length=16)
     public_base_url: HttpUrl
     ai_api_key: str

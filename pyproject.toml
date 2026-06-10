@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "parser-tg-yt-x"
 version = "0.1.0"
-description = "Telegram and YouTube crypto content curator for Sumify"
+description = "Telegram and YouTube crypto content curator"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
@@ -51,4 +51,3 @@ python_version = "3.12"
 plugins = ["pydantic.mypy"]
 strict = true
 exclude = ["alembic"]
-

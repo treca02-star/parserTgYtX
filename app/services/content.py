@@ -30,7 +30,7 @@ def item_keyboard(item_id: int, url: str, sent: bool = False) -> InlineKeyboardM
 
 def format_card(item: ContentItem, sent: bool = False) -> str:
     type_name = "YouTube" if item.kind == "youtube" else "Пост Telegram"
-    state = "\n\n✅ <b>Передано в Sumify</b>" if sent else ""
+    state = "\n\n✅ <b>Передано в обработку</b>" if sent else ""
     return (
         f"<b>{escape(item.author)} | {escape(item.title)} | {type_name}</b>\n\n"
         f"{escape(item.summary)}\n\nРелевантность: {item.relevance:.0%}{state}"
@@ -108,18 +108,18 @@ class ContentPipeline:
         if item.kind == "telegram" and item.source_chat_id and item.source_message_id:
             try:
                 await self.bot.copy_message(
-                    self.settings.telegram_sumify_chat_id,
+                    self.settings.telegram_output_chat_id,
                     item.source_chat_id,
                     item.source_message_id,
                 )
             except TelegramBadRequest:
                 fallback = "\n\n".join(part for part in (item.content, item.url) if part)
                 await self.bot.send_message(
-                    self.settings.telegram_sumify_chat_id,
+                    self.settings.telegram_output_chat_id,
                     fallback or "Исходное сообщение защищено от копирования.",
                 )
         else:
-            await self.bot.send_message(self.settings.telegram_sumify_chat_id, item.url)
+            await self.bot.send_message(self.settings.telegram_output_chat_id, item.url)
         item.status = "sent"
         item.sent_at = datetime.now(UTC)
         await session.commit()

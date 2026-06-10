@@ -51,4 +51,4 @@ def test_sent_card_keeps_only_link_button() -> None:
     keyboard = item_keyboard(item.id, item.url, sent=True)
     assert len(keyboard.inline_keyboard) == 1
     assert keyboard.inline_keyboard[0][0].url == item.url
-    assert "Передано в Sumify" in format_card(item, sent=True)
+    assert "Передано в обработку" in format_card(item, sent=True)
