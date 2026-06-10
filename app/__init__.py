@@ -1,0 +1,2 @@
+"""ParserTgYtX application."""
+
