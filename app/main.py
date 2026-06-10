@@ -24,7 +24,11 @@ bot = Bot(settings.telegram_bot_token, default=DefaultBotProperties(parse_mode=P
 dispatcher = Dispatcher(storage=MemoryStorage())
 dispatcher.include_router(router)
 youtube = YouTubeService(settings.youtube_callback_url)
-analyzer = ContentAnalyzer(settings.openai_api_key, settings.openai_model)
+analyzer = ContentAnalyzer(
+    settings.ai_api_key,
+    settings.ai_model,
+    str(settings.ai_base_url),
+)
 pipeline = ContentPipeline(bot, analyzer, settings)
 session_dependency = Depends(get_session)
 

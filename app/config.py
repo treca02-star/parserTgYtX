@@ -14,8 +14,9 @@ class Settings(BaseSettings):
     telegram_sumify_chat_id: int
     telegram_webhook_secret: str = Field(min_length=16)
     public_base_url: HttpUrl
-    openai_api_key: str
-    openai_model: str = "gpt-4.1-mini"
+    ai_api_key: str
+    ai_base_url: HttpUrl = HttpUrl("https://openrouter.ai/api/v1")
+    ai_model: str = "openai/gpt-5.4-mini"
     database_url: str
     default_filter_mode: Literal["all", "soft", "medium", "strict"] = "medium"
     default_filter_prompt: str = ""

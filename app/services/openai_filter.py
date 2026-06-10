@@ -9,9 +9,10 @@ THRESHOLDS = {"all": 0.0, "soft": 0.35, "medium": 0.6, "strict": 0.8}
 
 
 class ContentAnalyzer:
-    def __init__(self, api_key: str, model: str) -> None:
+    def __init__(self, api_key: str, model: str, base_url: str) -> None:
         self.client = AsyncOpenAI(
             api_key=api_key,
+            base_url=base_url,
             http_client=httpx.AsyncClient(trust_env=False),
         )
         self.model = model
@@ -21,9 +22,9 @@ class ContentAnalyzer:
     ) -> AnalysisResult:
         if mode == "all":
             return AnalysisResult(True, 1.0, self._fallback_title(item), "Без AI-фильтра")
-        response = await self.client.responses.create(
+        response = await self.client.chat.completions.create(
             model=self.model,
-            input=[
+            messages=[
                 {
                     "role": "system",
                     "content": (
@@ -40,8 +41,14 @@ class ContentAnalyzer:
                     ),
                 },
             ],
+            response_format={"type": "json_object"},
+            max_tokens=300,
+            temperature=0.1,
         )
-        data = json.loads(response.output_text)
+        content = response.choices[0].message.content
+        if not content:
+            raise ValueError("AI provider returned an empty response")
+        data = json.loads(content)
         score = max(0.0, min(1.0, float(data["score"])))
         return AnalysisResult(
             relevant=score >= THRESHOLDS[mode],

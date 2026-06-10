@@ -8,8 +8,7 @@ os.environ.update(
         "TELEGRAM_SUMIFY_CHAT_ID": "-1002",
         "TELEGRAM_WEBHOOK_SECRET": "0123456789abcdef",
         "PUBLIC_BASE_URL": "https://example.test",
-        "OPENAI_API_KEY": "test",
+        "AI_API_KEY": "test",
         "DATABASE_URL": "sqlite+aiosqlite:///:memory:",
     }
 )
-
