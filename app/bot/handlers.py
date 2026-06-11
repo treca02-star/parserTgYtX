@@ -65,7 +65,7 @@ def telegram_message_url(message: Message) -> str:
     return ""
 
 
-def parse_inbox_content(message: Message) -> tuple[str, str, str]:
+def parse_inbox_content(message: Message) -> tuple[str, str, str, int]:
     content = message.text or message.caption or ""
     lines = content.splitlines()
     author = message.author_signature or message.chat.title or "Telegram"
@@ -76,19 +76,25 @@ def parse_inbox_content(message: Message) -> tuple[str, str, str]:
             lines = lines[1:]
 
     source_url = ""
+    material_urls: set[str] = set()
     entities = message.entities if message.text is not None else message.caption_entities
     for entity in entities or []:
-        if entity.type == "text_link" and entity.url:
-            label = entity.extract_from(content).strip()
-            if label.casefold() == "источник":
-                source_url = entity.url
-                break
+        label = entity.extract_from(content).strip()
+        entity_url = entity.url if entity.type == "text_link" else None
+        if entity.type == "url":
+            entity_url = label
+        if not entity_url:
+            continue
+        if label.casefold() == "источник":
+            source_url = entity_url
+        else:
+            material_urls.add(entity_url)
 
     while lines and not lines[-1].strip():
         lines.pop()
     if lines and lines[-1].strip().casefold() == "источник":
         lines.pop()
-    return author, "\n".join(lines).strip(), source_url
+    return author, "\n".join(lines).strip(), source_url, len(material_urls)
 
 
 @router.message(CommandStart())
@@ -436,7 +442,7 @@ async def process_inbox_message(
                 message.migrate_from_chat_id,
             )
         return
-    author, content, source_url = parse_inbox_content(message)
+    author, content, source_url, extra_materials = parse_inbox_content(message)
     url = source_url or telegram_message_url(message)
     if not url:
         try:
@@ -453,6 +459,7 @@ async def process_inbox_message(
             external_id=f"{message.chat.id}:{message.message_id}",
             author=author,
             content=content,
+            extra_materials=extra_materials,
             media_type=(
                 "video"
                 if (
@@ -464,10 +471,11 @@ async def process_inbox_message(
                         and message.document.mime_type.startswith("video/")
                     )
                 )
+                else "voice"
+                if getattr(message, "voice", None)
                 else "audio"
                 if (
                     getattr(message, "audio", None)
-                    or getattr(message, "voice", None)
                     or (
                         message.document
                         and message.document.mime_type

@@ -2,7 +2,7 @@ from app.bot.handlers import allowed
 from app.config import get_settings
 from app.models import ContentItem
 from app.schemas import NormalizedItem
-from app.services.content import format_card, item_keyboard
+from app.services.content import format_card, item_keyboard, media_notes
 from app.services.openai_filter import THRESHOLDS, ContentAnalyzer
 from app.services.youtube import parse_feed
 
@@ -40,6 +40,16 @@ def test_ai_response_accepts_single_object_array() -> None:
 
     assert result["score"] == 0.8
     assert result["title"] == "Тема"
+
+
+def test_ai_title_removes_repeated_author() -> None:
+    assert (
+        ContentAnalyzer._clean_title(
+            "Обзор рыночных трендов от #Trader8020",
+            "#Trader8020",
+        )
+        == "Обзор рыночных трендов"
+    )
 
 
 def test_youtube_feed_normalization() -> None:
@@ -82,3 +92,25 @@ def test_sent_card_keeps_only_link_button() -> None:
     assert '<a href="https://youtube.com/watch?v=abc">Источник</a>' in card
     assert card.index("Источник") < card.index("Релевантность")
     assert "Передано в обработку" in card
+
+
+def test_card_uses_short_media_notes() -> None:
+    item = ContentItem(
+        id=8,
+        kind="telegram",
+        external_id="post",
+        author="#Trader8020",
+        title="Обзор рынка",
+        summary="Краткое описание.",
+        content="",
+        media_type="voice",
+        extra_materials=2,
+        url="https://t.me/source/1",
+        relevance=1,
+        status="new",
+    )
+
+    assert media_notes(item) == "🎙 Голосовое сообщение\n📥 Два дополнительных материала"
+    card = format_card(item)
+    assert "#Trader8020 | Обзор рынка | Пост TG" in card
+    assert "прикреплено голосовое" not in card

@@ -1,6 +1,6 @@
 from datetime import UTC, datetime
 
-from sqlalchemy import BigInteger, Boolean, DateTime, Float, String, Text, UniqueConstraint
+from sqlalchemy import BigInteger, Boolean, DateTime, Float, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db import Base
@@ -55,6 +55,7 @@ class ContentItem(Base):
     summary: Mapped[str] = mapped_column(Text, default="")
     content: Mapped[str] = mapped_column(Text, default="")
     media_type: Mapped[str] = mapped_column(String(20), default="none")
+    extra_materials: Mapped[int] = mapped_column(Integer, default=0)
     url: Mapped[str] = mapped_column(Text)
     source_chat_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     source_message_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)

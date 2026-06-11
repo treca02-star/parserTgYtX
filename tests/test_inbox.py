@@ -100,8 +100,47 @@ def test_inbox_metadata_is_extracted_from_name_and_source_link() -> None:
         }
     )
 
-    author, content, source_url = parse_inbox_content(message)
+    author, content, source_url, extra_materials = parse_inbox_content(message)
 
     assert author == "#Слезы_Сатоши"
     assert content == "Разбор движения Bitcoin."
     assert source_url == "https://t.me/source/123"
+    assert extra_materials == 0
+
+
+def test_inbox_counts_hidden_material_links_except_source() -> None:
+    text = "Имя: #Trader8020\n\nМатериалы: первый, второй.\n\nИсточник"
+    message = Message.model_validate(
+        {
+            "message_id": 18,
+            "date": 0,
+            "chat": {"id": -1001, "type": "supergroup", "title": "Parser"},
+            "text": text,
+            "entities": [
+                {
+                    "type": "text_link",
+                    "offset": text.index("первый"),
+                    "length": len("первый"),
+                    "url": "https://example.com/first",
+                },
+                {
+                    "type": "text_link",
+                    "offset": text.index("второй"),
+                    "length": len("второй"),
+                    "url": "https://example.com/second",
+                },
+                {
+                    "type": "text_link",
+                    "offset": text.index("Источник"),
+                    "length": len("Источник"),
+                    "url": "https://t.me/source/123",
+                },
+            ],
+        }
+    )
+
+    author, _, source_url, extra_materials = parse_inbox_content(message)
+
+    assert author == "#Trader8020"
+    assert source_url == "https://t.me/source/123"
+    assert extra_materials == 2

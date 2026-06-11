@@ -17,6 +17,30 @@ from app.services.openai_filter import ContentAnalyzer
 logger = logging.getLogger(__name__)
 
 
+def extra_materials_label(count: int) -> str:
+    if count % 10 == 1 and count % 100 != 11:
+        noun = "дополнительный материал"
+    elif count % 10 in {2, 3, 4} and count % 100 not in {12, 13, 14}:
+        noun = "дополнительных материала"
+    else:
+        noun = "дополнительных материалов"
+    words = {1: "Один", 2: "Два", 3: "Три", 4: "Четыре"}
+    return f"{words.get(count, str(count))} {noun}"
+
+
+def media_notes(item: ContentItem) -> str:
+    notes = []
+    if item.media_type == "voice":
+        notes.append("🎙 Голосовое сообщение")
+    elif item.media_type == "audio":
+        notes.append("🎧 Аудио")
+    elif item.media_type == "video" and item.kind == "telegram":
+        notes.append("🎬 Видео")
+    if item.extra_materials:
+        notes.append(f"📥 {extra_materials_label(item.extra_materials)}")
+    return "\n".join(notes)
+
+
 def item_keyboard(
     item_id: int,
     url: str,
@@ -45,9 +69,11 @@ def format_card(item: ContentItem, sent: bool = False) -> str:
         if item.url
         else ""
     )
+    notes = media_notes(item)
+    notes_block = f"\n\n{notes}" if notes else ""
     return (
         f"<b>{escape(item.author)} | {escape(item.title)} | {type_name}</b>\n\n"
-        f"{escape(item.summary)}{source}\n\n"
+        f"{escape(item.summary)}{notes_block}{source}\n\n"
         f"Релевантность: {item.relevance:.0%}{state}"
     )
 
@@ -83,6 +109,7 @@ class ContentPipeline:
             summary=analysis.summary,
             content=incoming.content,
             media_type=incoming.media_type,
+            extra_materials=incoming.extra_materials,
             url=incoming.url,
             source_chat_id=incoming.source_chat_id,
             source_message_id=incoming.source_message_id,
