@@ -437,6 +437,16 @@ async def process_inbox_message(
                         and message.document.mime_type.startswith("video/")
                     )
                 )
+                else "audio"
+                if (
+                    getattr(message, "audio", None)
+                    or getattr(message, "voice", None)
+                    or (
+                        message.document
+                        and message.document.mime_type
+                        and message.document.mime_type.startswith("audio/")
+                    )
+                )
                 else "none"
             ),
             title_hint=content[:80],

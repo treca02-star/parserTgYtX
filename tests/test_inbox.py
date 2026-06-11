@@ -19,6 +19,8 @@ async def test_group_message_is_ingested() -> None:
         video=None,
         video_note=None,
         document=None,
+        audio=None,
+        voice=None,
     )
     message.bot.get_chat.return_value = SimpleNamespace(
         invite_link="https://t.me/+private-group"
@@ -45,3 +47,29 @@ def test_private_supergroup_message_url() -> None:
         message_id=42,
     )
     assert telegram_message_url(message) == "https://t.me/c/1234567890/42"
+
+
+@pytest.mark.asyncio
+async def test_telegram_audio_is_reported_to_pipeline() -> None:
+    message = SimpleNamespace(
+        chat=SimpleNamespace(id=-1001, username=None, title="Parser", type="group"),
+        text=None,
+        caption="Аудиокомментарий о рынке",
+        message_id=16,
+        author_signature=None,
+        bot=AsyncMock(),
+        video=None,
+        video_note=None,
+        document=None,
+        audio=SimpleNamespace(),
+        voice=None,
+    )
+    message.bot.get_chat.return_value = SimpleNamespace(
+        invite_link="https://t.me/+private-group"
+    )
+    pipeline = AsyncMock()
+
+    await process_inbox_message(message, pipeline, AsyncMock(), get_settings())
+
+    incoming = pipeline.ingest.await_args.args[1]
+    assert incoming.media_type == "audio"

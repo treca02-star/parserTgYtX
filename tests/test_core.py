@@ -1,8 +1,9 @@
 from app.bot.handlers import allowed
 from app.config import get_settings
 from app.models import ContentItem
+from app.schemas import NormalizedItem
 from app.services.content import format_card, item_keyboard
-from app.services.openai_filter import THRESHOLDS
+from app.services.openai_filter import THRESHOLDS, ContentAnalyzer
 from app.services.youtube import parse_feed
 
 
@@ -14,6 +15,22 @@ def test_owner_access() -> None:
 
 def test_filter_thresholds_are_ordered() -> None:
     assert THRESHOLDS["all"] < THRESHOLDS["soft"] < THRESHOLDS["medium"] < THRESHOLDS["strict"]
+
+
+def test_ai_media_context_describes_attachments_and_youtube_links() -> None:
+    item = NormalizedItem(
+        kind="telegram",
+        external_id="post-1",
+        author="Author",
+        content="Подробности: https://youtu.be/example",
+        media_type="video",
+        url="https://t.me/example/1",
+    )
+
+    context = ContentAnalyzer._media_context(item)
+
+    assert "видео Telegram" in context
+    assert "ссылка YouTube" in context
 
 
 def test_youtube_feed_normalization() -> None:
