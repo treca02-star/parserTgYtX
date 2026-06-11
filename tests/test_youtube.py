@@ -1,9 +1,11 @@
+from datetime import UTC, datetime, timedelta
+
 import httpx
 import pytest
 import respx
 
 from app.services.youtube import YouTubeService
-from app.services.youtube_poller import mode_accepts
+from app.services.youtube_poller import MAX_POLL_VIDEO_AGE, mode_accepts
 
 
 @pytest.mark.asyncio
@@ -35,3 +37,26 @@ def test_source_modes() -> None:
     assert not mode_accepts("long", "shorts")
     assert mode_accepts("shorts", "shorts")
     assert not mode_accepts("off", "long")
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_video_details_reads_publish_date() -> None:
+    respx.get("https://www.youtube.com/watch?v=video123456").mock(
+        return_value=httpx.Response(
+            200,
+            text=(
+                "<html><head><title>Market update - YouTube</title></head>"
+                '<body>{"publishDate":"2026-06-11","isLiveContent":false}</body></html>'
+            ),
+        )
+    )
+
+    title, is_live, published_at = await YouTubeService(
+        "https://example.test/webhooks/youtube"
+    ).video_details("video123456")
+
+    assert title == "Market update"
+    assert is_live is False
+    assert published_at == datetime(2026, 6, 11, tzinfo=UTC)
+    assert MAX_POLL_VIDEO_AGE == timedelta(hours=48)

@@ -1,6 +1,7 @@
 import asyncio
 import re
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from html import unescape
 from xml.etree import ElementTree
 
@@ -26,6 +27,11 @@ YOUTUBE_HEADERS = {
 }
 VIDEO_ID_PATTERN = re.compile(r'"contentId":"([\w-]{11})"')
 SHORT_ID_PATTERN = re.compile(r"/shorts/([\w-]{11})")
+PUBLISH_DATE_PATTERNS = (
+    re.compile(r'"publishDate":"(\d{4}-\d{2}-\d{2})"'),
+    re.compile(r'"uploadDate":"(\d{4}-\d{2}-\d{2})"'),
+    re.compile(r'<meta itemprop="datePublished" content="(\d{4}-\d{2}-\d{2})'),
+)
 
 
 @dataclass(slots=True)
@@ -110,7 +116,7 @@ class YouTubeService:
             *(YouTubeEntry(video_id, "shorts") for video_id in short_ids),
         ]
 
-    async def video_title(self, video_id: str) -> tuple[str, bool]:
+    async def video_details(self, video_id: str) -> tuple[str, bool, datetime | None]:
         async with httpx.AsyncClient(
             follow_redirects=True, timeout=20, trust_env=False, headers=YOUTUBE_HEADERS
         ) as client:
@@ -123,7 +129,19 @@ class YouTubeService:
             if title
             else "Новое видео"
         )
-        return clean_title, is_live
+        published_at = next(
+            (
+                datetime.strptime(match.group(1), "%Y-%m-%d").replace(tzinfo=UTC)
+                for pattern in PUBLISH_DATE_PATTERNS
+                if (match := pattern.search(response.text))
+            ),
+            None,
+        )
+        return clean_title, is_live, published_at
+
+    async def video_title(self, video_id: str) -> tuple[str, bool]:
+        title, is_live, _ = await self.video_details(video_id)
+        return title, is_live
 
 
 def parse_feed(payload: bytes) -> list[NormalizedItem]:

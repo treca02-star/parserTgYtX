@@ -1,4 +1,5 @@
 import logging
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -9,6 +10,7 @@ from app.services.content import ContentPipeline
 from app.services.youtube import YouTubeService
 
 logger = logging.getLogger(__name__)
+MAX_POLL_VIDEO_AGE = timedelta(hours=48)
 
 
 def mode_accepts(mode: str, kind: str) -> bool:
@@ -37,8 +39,12 @@ async def poll_source(
         )
         if first_poll or not mode_accepts(source.content_mode, entry.kind):
             continue
-        title, is_live = await youtube.video_title(entry.video_id)
-        if is_live:
+        title, is_live, published_at = await youtube.video_details(entry.video_id)
+        if (
+            is_live
+            or published_at is None
+            or datetime.now(UTC) - published_at > MAX_POLL_VIDEO_AGE
+        ):
             continue
         item = await pipeline.ingest(
             session,
