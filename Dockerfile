@@ -1,3 +1,5 @@
+FROM node:24-bookworm-slim AS node_runtime
+
 FROM python:3.12-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -6,8 +8,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ffmpeg nodejs \
+    && apt-get install -y --no-install-recommends ffmpeg \
     && rm -rf /var/lib/apt/lists/*
+COPY --from=node_runtime /usr/local/bin/node /usr/local/bin/node
 COPY pyproject.toml README.md ./
 COPY app ./app
 COPY alembic.ini ./
