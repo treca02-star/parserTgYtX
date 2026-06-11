@@ -33,6 +33,15 @@ def test_ai_media_context_describes_attachments_and_youtube_links() -> None:
     assert "ссылка YouTube" in context
 
 
+def test_ai_response_accepts_single_object_array() -> None:
+    result = ContentAnalyzer._decode_response(
+        '[{"score": 0.8, "title": "Тема", "summary": "Описание"}]'
+    )
+
+    assert result["score"] == 0.8
+    assert result["title"] == "Тема"
+
+
 def test_youtube_feed_normalization() -> None:
     payload = b"""<?xml version="1.0" encoding="UTF-8"?>
     <feed xmlns="http://www.w3.org/2005/Atom"

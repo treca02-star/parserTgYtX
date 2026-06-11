@@ -107,7 +107,7 @@ class ContentPipeline:
             True,
             0.5,
             (item.title_hint or item.content)[:80],
-            "AI временно недоступен",
+            "Не удалось обработать материал с помощью AI",
         )
 
     async def publish(self, session: AsyncSession, item_id: int) -> tuple[ContentItem, bool]:
