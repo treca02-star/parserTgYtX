@@ -1,4 +1,5 @@
 import logging
+import re
 from typing import cast
 
 from aiogram import F, Router
@@ -62,6 +63,32 @@ def telegram_message_url(message: Message) -> str:
     if message.chat.type == "supergroup" and chat_id.startswith("-100"):
         return f"https://t.me/c/{chat_id[4:]}/{message.message_id}"
     return ""
+
+
+def parse_inbox_content(message: Message) -> tuple[str, str, str]:
+    content = message.text or message.caption or ""
+    lines = content.splitlines()
+    author = message.author_signature or message.chat.title or "Telegram"
+    if lines:
+        name_match = re.fullmatch(r"\s*Имя:\s*(.+?)\s*", lines[0], flags=re.IGNORECASE)
+        if name_match:
+            author = name_match.group(1)
+            lines = lines[1:]
+
+    source_url = ""
+    entities = message.entities if message.text is not None else message.caption_entities
+    for entity in entities or []:
+        if entity.type == "text_link" and entity.url:
+            label = entity.extract_from(content).strip()
+            if label.casefold() == "источник":
+                source_url = entity.url
+                break
+
+    while lines and not lines[-1].strip():
+        lines.pop()
+    if lines and lines[-1].strip().casefold() == "источник":
+        lines.pop()
+    return author, "\n".join(lines).strip(), source_url
 
 
 @router.message(CommandStart())
@@ -409,8 +436,8 @@ async def process_inbox_message(
                 message.migrate_from_chat_id,
             )
         return
-    content = message.text or message.caption or ""
-    url = telegram_message_url(message)
+    author, content, source_url = parse_inbox_content(message)
+    url = source_url or telegram_message_url(message)
     if not url:
         try:
             if message.bot is None:
@@ -424,7 +451,7 @@ async def process_inbox_message(
         NormalizedItem(
             kind="telegram",
             external_id=f"{message.chat.id}:{message.message_id}",
-            author=message.author_signature or message.chat.title or "Telegram",
+            author=author,
             content=content,
             media_type=(
                 "video"

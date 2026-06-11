@@ -38,7 +38,7 @@ def item_keyboard(
 
 
 def format_card(item: ContentItem, sent: bool = False) -> str:
-    type_name = "YouTube" if item.kind == "youtube" else "Пост Telegram"
+    type_name = "YouTube" if item.kind == "youtube" else "Пост TG"
     state = "\n\n✅ <b>Передано в обработку</b>" if sent else ""
     return (
         f"<b>{escape(item.author)} | {escape(item.title)} | {type_name}</b>\n\n"
