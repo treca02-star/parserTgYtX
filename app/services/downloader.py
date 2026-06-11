@@ -81,6 +81,7 @@ class MediaDownloader:
             "quiet": True,
             "no_warnings": True,
             "socket_timeout": 30,
+            "js_runtimes": {"node": {}},
             "extractor_args": {
                 "youtube": {"player_client": ["mweb"]},
                 "youtubepot-bgutilhttp": {
