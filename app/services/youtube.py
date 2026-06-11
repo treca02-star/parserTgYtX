@@ -1,5 +1,6 @@
 import re
 from dataclasses import dataclass
+from html import unescape
 from xml.etree import ElementTree
 
 import httpx
@@ -11,6 +12,17 @@ CHANNEL_PATTERNS = (
     re.compile(r"youtube\.com/channel/(?P<id>UC[\w-]+)"),
     re.compile(r"youtube\.com/@(?P<handle>[\w.-]+)"),
 )
+CHANNEL_ID_PATTERNS = (
+    re.compile(r'"channelId":"(UC[\w-]+)"'),
+    re.compile(r'"browseId":"(UC[\w-]+)"'),
+    re.compile(r'<meta itemprop="channelId" content="(UC[\w-]+)"'),
+    re.compile(r"youtube\.com/channel/(UC[\w-]+)"),
+)
+YOUTUBE_HEADERS = {
+    "User-Agent": "Mozilla/5.0",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Cookie": "SOCS=CAI",
+}
 
 
 @dataclass(slots=True)
@@ -33,15 +45,26 @@ class YouTubeService:
         async with httpx.AsyncClient(
             follow_redirects=True, timeout=15, trust_env=False
         ) as client:
-            response = await client.get(value)
+            response = await client.get(value, headers=YOUTUBE_HEADERS)
             response.raise_for_status()
-        match = re.search(r'"channelId":"(UC[\w-]+)"', response.text)
+        channel_id = next(
+            (
+                match.group(1)
+                for pattern in CHANNEL_ID_PATTERNS
+                if (match := pattern.search(response.text))
+            ),
+            None,
+        )
         title = re.search(r"<title>(.*?)</title>", response.text, re.IGNORECASE)
-        if not match:
-            raise ValueError("Не удалось определить YouTube channel ID")
+        if not channel_id:
+            raise ValueError("Не удалось определить ID YouTube-канала")
         return YouTubeChannel(
-            match.group(1),
-            (title.group(1).replace(" - YouTube", "") if title else match.group(1)),
+            channel_id,
+            (
+                unescape(title.group(1)).replace(" - YouTube", "")
+                if title
+                else channel_id
+            ),
             str(response.url),
         )
 
