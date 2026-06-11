@@ -24,6 +24,13 @@ from app.services.youtube import YouTubeService
 
 router = Router()
 logger = logging.getLogger(__name__)
+SOURCE_MODE_LABELS = {
+    "all": "🟢 Все видео",
+    "long": "🎬 Только длинные",
+    "shorts": "📱 Только Shorts",
+    "off": "⏸ Выключен",
+}
+NEXT_SOURCE_MODE = {"all": "long", "long": "shorts", "shorts": "off", "off": "all"}
 
 
 class Form(StatesGroup):
@@ -123,6 +130,7 @@ async def source_add_value(
                     external_id=channel.channel_id,
                     title=channel.title,
                     url=channel.url,
+                    content_mode="all",
                 )
             )
             await session.commit()
@@ -142,13 +150,20 @@ async def source_list(
     if not allowed(callback.from_user.id, settings):
         return
     sources = (await session.scalars(select(Source).order_by(Source.title))).all()
-    text = "\n".join(
-        f"{'🟢' if source.enabled else '⚪'} {source.title}" for source in sources
-    ) or "Источники пока не добавлены."
+    text = (
+        "\n".join(
+            f"{SOURCE_MODE_LABELS.get(source.content_mode, '🟢 Все видео')} — {source.title}"
+            for source in sources
+        )
+        or "Источники пока не добавлены."
+    )
     rows = [
         [
             InlineKeyboardButton(
-                text=f"{'⏸' if source.enabled else '▶️'} {source.title[:30]}",
+                text=(
+                    f"{SOURCE_MODE_LABELS.get(source.content_mode, '🟢 Все видео')}"
+                    f" · {source.title[:24]}"
+                ),
                 callback_data=f"source:toggle:{source.id}",
             ),
             InlineKeyboardButton(text="🗑", callback_data=f"source:delete:{source.id}"),
@@ -173,9 +188,10 @@ async def source_toggle(
         return
     source = await session.get(Source, int(callback_data(callback).rsplit(":", 1)[1]))
     if source:
-        source.enabled = not source.enabled
+        source.content_mode = NEXT_SOURCE_MODE.get(source.content_mode, "all")
+        source.enabled = source.content_mode != "off"
         await session.commit()
-        mode = "subscribe" if source.enabled else "unsubscribe"
+        mode = "subscribe" if source.content_mode != "off" else "unsubscribe"
         await youtube.subscribe(source.external_id, mode)
     await source_list(callback, session, settings)
 

@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 
@@ -17,6 +18,7 @@ from app.models import Source
 from app.services.content import ContentPipeline
 from app.services.openai_filter import ContentAnalyzer
 from app.services.youtube import YouTubeService, parse_feed
+from app.services.youtube_poller import mode_accepts, poll_all_sources
 
 settings = get_settings()
 logging.basicConfig(level=settings.log_level)
@@ -31,6 +33,7 @@ analyzer = ContentAnalyzer(
 )
 pipeline = ContentPipeline(bot, analyzer, settings)
 session_dependency = Depends(get_session)
+polling_task: asyncio.Task[None] | None = None
 
 
 class DependenciesMiddleware(BaseMiddleware):
@@ -50,6 +53,7 @@ dispatcher.update.outer_middleware(DependenciesMiddleware())
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):  # type: ignore[no-untyped-def]
+    global polling_task
     await bot.set_webhook(
         settings.telegram_webhook_url,
         secret_token=settings.telegram_webhook_secret,
@@ -57,15 +61,30 @@ async def lifespan(app: FastAPI):  # type: ignore[no-untyped-def]
     )
     async with SessionFactory() as session:
         sources = (
-            await session.scalars(select(Source).where(Source.kind == "youtube", Source.enabled))
+            await session.scalars(
+                select(Source).where(
+                    Source.kind == "youtube",
+                    Source.content_mode != "off",
+                )
+            )
         ).all()
     for source in sources:
         try:
             await youtube.subscribe(source.external_id)
         except Exception:
             logging.exception("Could not renew YouTube subscription for %s", source.external_id)
+    polling_task = asyncio.create_task(youtube_polling_loop())
     yield
+    if polling_task:
+        polling_task.cancel()
     await bot.session.close()
+
+
+async def youtube_polling_loop() -> None:
+    while True:
+        async with SessionFactory() as session:
+            await poll_all_sources(session, youtube, pipeline)
+        await asyncio.sleep(120)
 
 
 app = FastAPI(title="ParserTgYtX", version="0.1.0", lifespan=lifespan)
@@ -112,9 +131,18 @@ async def youtube_webhook(
             select(Source).where(
                 Source.kind == "youtube",
                 Source.external_id == item.source_external_id,
-                Source.enabled,
+                Source.content_mode != "off",
             )
         )
-        if source and await pipeline.ingest(session, item):
+        if not source:
+            continue
+        entries = await youtube.list_entries(source.url)
+        kind = next(
+            (entry.kind for entry in entries if entry.video_id == item.external_id),
+            None,
+        )
+        if kind and mode_accepts(source.content_mode, kind) and await pipeline.ingest(
+            session, item
+        ):
             accepted += 1
     return {"accepted": accepted}

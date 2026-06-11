@@ -3,6 +3,7 @@ import pytest
 import respx
 
 from app.services.youtube import YouTubeService
+from app.services.youtube_poller import mode_accepts
 
 
 @pytest.mark.asyncio
@@ -25,3 +26,12 @@ async def test_resolve_handle_from_browse_id() -> None:
     assert route.called
     assert channel.channel_id == "UCI3uVtN-W5StRN1RsLNKV6g"
     assert channel.title == "HAMAHA Bitcoin"
+
+
+def test_source_modes() -> None:
+    assert mode_accepts("all", "long")
+    assert mode_accepts("all", "shorts")
+    assert mode_accepts("long", "long")
+    assert not mode_accepts("long", "shorts")
+    assert mode_accepts("shorts", "shorts")
+    assert not mode_accepts("off", "long")

@@ -1,3 +1,4 @@
+import asyncio
 import re
 from dataclasses import dataclass
 from html import unescape
@@ -23,6 +24,8 @@ YOUTUBE_HEADERS = {
     "Accept-Language": "en-US,en;q=0.9",
     "Cookie": "SOCS=CAI",
 }
+VIDEO_ID_PATTERN = re.compile(r'"contentId":"([\w-]{11})"')
+SHORT_ID_PATTERN = re.compile(r"/shorts/([\w-]{11})")
 
 
 @dataclass(slots=True)
@@ -30,6 +33,12 @@ class YouTubeChannel:
     channel_id: str
     title: str
     url: str
+
+
+@dataclass(slots=True)
+class YouTubeEntry:
+    video_id: str
+    kind: str
 
 
 class YouTubeService:
@@ -82,6 +91,39 @@ class YouTubeService:
                 },
             )
             response.raise_for_status()
+
+    async def list_entries(self, channel_url: str) -> list[YouTubeEntry]:
+        base_url = channel_url.rstrip("/")
+        async with httpx.AsyncClient(
+            follow_redirects=True, timeout=20, trust_env=False, headers=YOUTUBE_HEADERS
+        ) as client:
+            videos_response, shorts_response = await asyncio.gather(
+                client.get(f"{base_url}/videos"),
+                client.get(f"{base_url}/shorts"),
+            )
+        videos_response.raise_for_status()
+        shorts_response.raise_for_status()
+        long_ids = list(dict.fromkeys(VIDEO_ID_PATTERN.findall(videos_response.text)))
+        short_ids = list(dict.fromkeys(SHORT_ID_PATTERN.findall(shorts_response.text)))
+        return [
+            *(YouTubeEntry(video_id, "long") for video_id in long_ids),
+            *(YouTubeEntry(video_id, "shorts") for video_id in short_ids),
+        ]
+
+    async def video_title(self, video_id: str) -> tuple[str, bool]:
+        async with httpx.AsyncClient(
+            follow_redirects=True, timeout=20, trust_env=False, headers=YOUTUBE_HEADERS
+        ) as client:
+            response = await client.get(f"https://www.youtube.com/watch?v={video_id}")
+        response.raise_for_status()
+        title = re.search(r"<title>(.*?)</title>", response.text, re.IGNORECASE)
+        is_live = bool(re.search(r'"isLiveContent":true', response.text))
+        clean_title = (
+            unescape(title.group(1)).replace(" - YouTube", "")
+            if title
+            else "Новое видео"
+        )
+        return clean_title, is_live
 
 
 def parse_feed(payload: bytes) -> list[NormalizedItem]:

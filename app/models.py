@@ -24,7 +24,21 @@ class Source(Base):
     title: Mapped[str] = mapped_column(String(255))
     url: Mapped[str] = mapped_column(Text)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    content_mode: Mapped[str] = mapped_column(String(20), default="all")
     created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+
+
+class YouTubeSeen(Base):
+    __tablename__ = "youtube_seen"
+    __table_args__ = (UniqueConstraint("source_id", "video_id", name="uq_seen_source_video"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    source_id: Mapped[int] = mapped_column()
+    video_id: Mapped[str] = mapped_column(String(32))
+    kind: Mapped[str] = mapped_column(String(20))
+    seen_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC)
     )
 
@@ -50,4 +64,3 @@ class ContentItem(Base):
         DateTime(timezone=True), default=lambda: datetime.now(UTC)
     )
     sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-
