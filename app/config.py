@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     public_base_url: HttpUrl
     ai_api_key: str
     ai_base_url: HttpUrl = HttpUrl("https://openrouter.ai/api/v1")
-    ai_model: str = "openai/gpt-5.4-mini"
+    ai_model: str = "google/gemini-3.1-flash-lite"
     database_url: str
     default_filter_mode: Literal["all", "soft", "medium", "strict"] = "medium"
     default_filter_prompt: str = ""
