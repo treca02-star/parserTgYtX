@@ -81,7 +81,12 @@ class MediaDownloader:
             "quiet": True,
             "no_warnings": True,
             "socket_timeout": 30,
-            "extractor_args": {"youtube": {"player_client": ["android_vr"]}},
+            "extractor_args": {
+                "youtube": {"player_client": ["mweb"]},
+                "youtubepot-bgutilhttp": {
+                    "base_url": ["http://pot-provider:4416"]
+                },
+            },
         }
         try:
             with yt_dlp.YoutubeDL(options) as downloader:
