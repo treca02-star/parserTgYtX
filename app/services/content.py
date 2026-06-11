@@ -40,9 +40,15 @@ def item_keyboard(
 def format_card(item: ContentItem, sent: bool = False) -> str:
     type_name = "YouTube" if item.kind == "youtube" else "Пост TG"
     state = "\n\n✅ <b>Передано в обработку</b>" if sent else ""
+    source = (
+        f'\n\n<a href="{escape(item.url, quote=True)}">Источник</a>'
+        if item.url
+        else ""
+    )
     return (
         f"<b>{escape(item.author)} | {escape(item.title)} | {type_name}</b>\n\n"
-        f"{escape(item.summary)}\n\nРелевантность: {item.relevance:.0%}{state}"
+        f"{escape(item.summary)}{source}\n\n"
+        f"Релевантность: {item.relevance:.0%}{state}"
     )
 
 

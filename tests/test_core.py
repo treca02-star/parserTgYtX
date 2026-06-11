@@ -78,4 +78,7 @@ def test_sent_card_keeps_only_link_button() -> None:
     assert len(keyboard.inline_keyboard) == 1
     assert keyboard.inline_keyboard[0][0].url == item.url
     assert keyboard.inline_keyboard[0][1].callback_data == "download:7"
-    assert "Передано в обработку" in format_card(item, sent=True)
+    card = format_card(item, sent=True)
+    assert '<a href="https://youtube.com/watch?v=abc">Источник</a>' in card
+    assert card.index("Источник") < card.index("Релевантность")
+    assert "Передано в обработку" in card
