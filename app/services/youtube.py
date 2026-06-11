@@ -148,6 +148,7 @@ def parse_feed(payload: bytes) -> list[NormalizedItem]:
                 title_hint=title,
                 source_external_id=channel_id,
                 content=title,
+                media_type="video",
                 url=f"https://www.youtube.com/watch?v={video_id}",
             )
         )

@@ -20,6 +20,7 @@ from app.config import Settings
 from app.models import AppSettings, ContentItem, Source
 from app.schemas import NormalizedItem
 from app.services.content import ContentPipeline, format_card, item_keyboard
+from app.services.downloader import DownloadError, MediaDownloader
 from app.services.youtube import YouTubeService
 
 router = Router()
@@ -317,7 +318,7 @@ async def menu_feed(
     for item in items:
         await callback_message(callback).answer(
             format_card(item),
-            reply_markup=item_keyboard(item.id, item.url),
+            reply_markup=item_keyboard(item.id, item.url, item.media_type),
         )
     await callback.answer()
 
@@ -350,7 +351,9 @@ async def publish_item(
         )
         await callback_message(callback).edit_text(
             format_card(item, sent=True),
-            reply_markup=item_keyboard(item.id, item.url, sent=True),
+            reply_markup=item_keyboard(
+                item.id, item.url, item.media_type, sent=True
+            ),
         )
         if not published:
             await callback_message(callback).answer("Этот материал уже был передан.")
@@ -358,6 +361,34 @@ async def publish_item(
         await session.rollback()
         await callback_message(callback).answer(
             "❌ Не удалось передать материал. Проверьте права бота и повторите."
+        )
+
+
+@router.callback_query(F.data.startswith("download:"))
+async def download_item(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    downloader: MediaDownloader,
+    settings: Settings,
+) -> None:
+    if not allowed(callback.from_user.id, settings):
+        await callback.answer("Нет доступа", show_alert=True)
+        return
+    await callback.answer("Готовлю видео…")
+    item = await session.get(
+        ContentItem, int(callback_data(callback).split(":", 1)[1])
+    )
+    if item is None or item.media_type != "video":
+        await callback_message(callback).answer("❌ Видео для скачивания не найдено.")
+        return
+    try:
+        await downloader.send(item)
+    except (DownloadError, TelegramAPIError, TimeoutError) as error:
+        await callback_message(callback).answer(f"❌ {error}")
+    except Exception:
+        logger.exception("Unexpected media download error for item %s", item.id)
+        await callback_message(callback).answer(
+            "❌ Не удалось скачать видео. Попробуйте еще раз позже."
         )
 
 
@@ -395,6 +426,19 @@ async def process_inbox_message(
             external_id=f"{message.chat.id}:{message.message_id}",
             author=message.author_signature or message.chat.title or "Telegram",
             content=content,
+            media_type=(
+                "video"
+                if (
+                    message.video
+                    or message.video_note
+                    or (
+                        message.document
+                        and message.document.mime_type
+                        and message.document.mime_type.startswith("video/")
+                    )
+                )
+                else "none"
+            ),
             title_hint=content[:80],
             url=url,
             source_chat_id=message.chat.id,

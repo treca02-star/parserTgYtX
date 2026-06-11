@@ -9,6 +9,7 @@ class NormalizedItem:
     content: str
     url: str
     title_hint: str = ""
+    media_type: str = "none"
     source_external_id: str | None = None
     source_chat_id: int | None = None
     source_message_id: int | None = None

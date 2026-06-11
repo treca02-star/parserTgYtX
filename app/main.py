@@ -16,6 +16,7 @@ from app.config import get_settings
 from app.db import SessionFactory, get_session
 from app.models import Source
 from app.services.content import ContentPipeline
+from app.services.downloader import MediaDownloader
 from app.services.openai_filter import ContentAnalyzer
 from app.services.youtube import YouTubeService, parse_feed
 from app.services.youtube_poller import mode_accepts, poll_all_sources
@@ -32,6 +33,7 @@ analyzer = ContentAnalyzer(
     str(settings.ai_base_url),
 )
 pipeline = ContentPipeline(bot, analyzer, settings)
+downloader = MediaDownloader(bot, settings)
 session_dependency = Depends(get_session)
 polling_task: asyncio.Task[None] | None = None
 
@@ -44,6 +46,7 @@ class DependenciesMiddleware(BaseMiddleware):
                 settings=settings,
                 youtube=youtube,
                 pipeline=pipeline,
+                downloader=downloader,
             )
             return await handler(event, data)
 

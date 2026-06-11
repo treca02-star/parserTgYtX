@@ -17,15 +17,24 @@ from app.services.openai_filter import ContentAnalyzer
 logger = logging.getLogger(__name__)
 
 
-def item_keyboard(item_id: int, url: str, sent: bool = False) -> InlineKeyboardMarkup:
-    rows = []
+def item_keyboard(
+    item_id: int,
+    url: str,
+    media_type: str = "none",
+    sent: bool = False,
+) -> InlineKeyboardMarkup:
+    row = []
     if not sent:
-        rows.append(
-            [InlineKeyboardButton(text="✅ Сделать пост", callback_data=f"publish:{item_id}")]
+        row.append(
+            InlineKeyboardButton(text="✅ Сделать пост", callback_data=f"publish:{item_id}")
         )
     if url:
-        rows.append([InlineKeyboardButton(text="🔗 Ссылка", url=url)])
-    return InlineKeyboardMarkup(inline_keyboard=rows)
+        row.append(InlineKeyboardButton(text="🔗 Ссылка", url=url))
+    if media_type == "video":
+        row.append(
+            InlineKeyboardButton(text="📥 Скачать", callback_data=f"download:{item_id}")
+        )
+    return InlineKeyboardMarkup(inline_keyboard=[row])
 
 
 def format_card(item: ContentItem, sent: bool = False) -> str:
@@ -67,6 +76,7 @@ class ContentPipeline:
             title=analysis.title,
             summary=analysis.summary,
             content=incoming.content,
+            media_type=incoming.media_type,
             url=incoming.url,
             source_chat_id=incoming.source_chat_id,
             source_message_id=incoming.source_message_id,
@@ -83,7 +93,7 @@ class ContentPipeline:
             message = await self.bot.send_message(
                 self.settings.telegram_owner_id,
                 format_card(item),
-                reply_markup=item_keyboard(item.id, item.url),
+                reply_markup=item_keyboard(item.id, item.url, item.media_type),
             )
             item.review_message_id = message.message_id
         await session.commit()

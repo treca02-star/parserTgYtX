@@ -48,7 +48,8 @@ def test_sent_card_keeps_only_link_button() -> None:
         relevance=0.9,
         status="sent",
     )
-    keyboard = item_keyboard(item.id, item.url, sent=True)
+    keyboard = item_keyboard(item.id, item.url, "video", sent=True)
     assert len(keyboard.inline_keyboard) == 1
     assert keyboard.inline_keyboard[0][0].url == item.url
+    assert keyboard.inline_keyboard[0][1].callback_data == "download:7"
     assert "Передано в обработку" in format_card(item, sent=True)

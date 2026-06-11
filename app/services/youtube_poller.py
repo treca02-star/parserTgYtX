@@ -48,6 +48,7 @@ async def poll_source(
                 author=source.title,
                 title_hint=title,
                 content=title,
+                media_type="video",
                 url=f"https://www.youtube.com/watch?v={entry.video_id}",
                 source_external_id=source.external_id,
             ),

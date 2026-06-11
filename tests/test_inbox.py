@@ -16,6 +16,9 @@ async def test_group_message_is_ingested() -> None:
         message_id=15,
         author_signature=None,
         bot=AsyncMock(),
+        video=None,
+        video_note=None,
+        document=None,
     )
     message.bot.get_chat.return_value = SimpleNamespace(
         invite_link="https://t.me/+private-group"
