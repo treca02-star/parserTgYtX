@@ -81,6 +81,7 @@ class MediaDownloader:
             "quiet": True,
             "no_warnings": True,
             "socket_timeout": 30,
+            "extractor_args": {"youtube": {"player_client": ["android_vr"]}},
         }
         try:
             with yt_dlp.YoutubeDL(options) as downloader:
