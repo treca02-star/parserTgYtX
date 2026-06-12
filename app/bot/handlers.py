@@ -3,7 +3,7 @@ import re
 from typing import cast
 
 from aiogram import F, Router
-from aiogram.exceptions import TelegramAPIError
+from aiogram.exceptions import TelegramAPIError, TelegramBadRequest
 from aiogram.filters import CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
@@ -54,6 +54,30 @@ def callback_message(callback: CallbackQuery) -> Message:
     if not isinstance(callback.message, Message):
         raise ValueError("Accessible callback message is required")
     return callback.message
+
+
+async def answer_callback_safely(
+    callback: CallbackQuery,
+    text: str | None = None,
+    show_alert: bool = False,
+) -> None:
+    try:
+        await callback.answer(text, show_alert=show_alert)
+    except TelegramBadRequest as error:
+        if "query is too old" not in str(error).lower():
+            raise
+
+
+async def edit_callback_safely(
+    callback: CallbackQuery,
+    text: str,
+    reply_markup: InlineKeyboardMarkup,
+) -> None:
+    try:
+        await callback_message(callback).edit_text(text, reply_markup=reply_markup)
+    except TelegramBadRequest as error:
+        if "message is not modified" not in str(error).lower():
+            raise
 
 
 def telegram_message_url(message: Message) -> str:
@@ -377,19 +401,25 @@ async def publish_item(
     callback: CallbackQuery, session: AsyncSession, pipeline: ContentPipeline, settings: Settings
 ) -> None:
     if not allowed(callback.from_user.id, settings):
-        await callback.answer("Нет доступа", show_alert=True)
+        await answer_callback_safely(callback, "Нет доступа", show_alert=True)
         return
-    await callback.answer("Передаю в обработку…")
-    if callback_data(callback) == "publish:processing":
-        return
+    await answer_callback_safely(callback, "Передаю в обработку…")
     item_id = int(callback_data(callback).split(":", 1)[1])
     item = await session.get(ContentItem, item_id)
     if item is None:
         await callback_message(callback).answer("Материал не найден.")
         return
-    await callback_message(callback).edit_text(
+    if item.status == "sent":
+        await edit_callback_safely(
+            callback,
+            format_card(item, sent=True),
+            item_keyboard(item.id, item.url, item.media_type, sent=True),
+        )
+        return
+    await edit_callback_safely(
+        callback,
         format_card(item, processing=True),
-        reply_markup=item_keyboard(
+        item_keyboard(
             item.id,
             item.url,
             item.media_type,
@@ -398,19 +428,19 @@ async def publish_item(
     )
     try:
         item, published = await pipeline.publish(session, item_id)
-        await callback_message(callback).edit_text(
+        await edit_callback_safely(
+            callback,
             format_card(item, sent=True),
-            reply_markup=item_keyboard(
-                item.id, item.url, item.media_type, sent=True
-            ),
+            item_keyboard(item.id, item.url, item.media_type, sent=True),
         )
         if not published:
             await callback_message(callback).answer("Этот материал уже был передан.")
     except TelegramAPIError:
         await session.rollback()
-        await callback_message(callback).edit_text(
+        await edit_callback_safely(
+            callback,
             format_card(item),
-            reply_markup=item_keyboard(item.id, item.url, item.media_type),
+            item_keyboard(item.id, item.url, item.media_type),
         )
         await callback_message(callback).answer(
             "❌ Не удалось передать материал. Проверьте права бота и повторите."

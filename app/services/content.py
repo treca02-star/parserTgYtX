@@ -38,7 +38,7 @@ def item_keyboard(
     row = []
     if processing:
         row.append(
-            InlineKeyboardButton(text="⏳ Передаю…", callback_data="publish:processing")
+            InlineKeyboardButton(text="⏳ Передаю…", callback_data=f"publish:{item_id}")
         )
     elif not sent:
         row.append(

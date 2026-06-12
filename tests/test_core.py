@@ -1,4 +1,9 @@
-from app.bot.handlers import allowed
+from unittest.mock import AsyncMock, patch
+
+import pytest
+from aiogram.exceptions import TelegramBadRequest
+
+from app.bot.handlers import allowed, answer_callback_safely, edit_callback_safely
 from app.config import get_settings
 from app.models import ContentItem
 from app.schemas import NormalizedItem
@@ -11,6 +16,31 @@ def test_owner_access() -> None:
     settings = get_settings()
     assert allowed(42, settings)
     assert not allowed(41, settings)
+
+
+@pytest.mark.asyncio
+async def test_stale_callback_answer_is_ignored() -> None:
+    callback = AsyncMock()
+    callback.answer.side_effect = TelegramBadRequest(
+        method=AsyncMock(),
+        message="query is too old and response timeout expired",
+    )
+
+    await answer_callback_safely(callback, "Передаю")
+
+
+@pytest.mark.asyncio
+async def test_unchanged_callback_message_is_ignored() -> None:
+    message = AsyncMock()
+    message.edit_text.side_effect = TelegramBadRequest(
+        method=AsyncMock(),
+        message="message is not modified",
+    )
+    callback = AsyncMock()
+    callback.message = message
+
+    with patch("app.bot.handlers.callback_message", return_value=message):
+        await edit_callback_safely(callback, "Текст", item_keyboard(1, "https://t.me/test"))
 
 
 def test_filter_thresholds_are_ordered() -> None:
@@ -136,7 +166,7 @@ def test_processing_card_shows_progress_and_disables_publish() -> None:
 
     assert "■■■□□ 60%" in card
     assert keyboard.inline_keyboard[0][0].text == "⏳ Передаю…"
-    assert keyboard.inline_keyboard[0][0].callback_data == "publish:processing"
+    assert keyboard.inline_keyboard[0][0].callback_data == "publish:10"
     assert keyboard.inline_keyboard[0][1].url == item.url
 
 
