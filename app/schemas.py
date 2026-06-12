@@ -22,3 +22,4 @@ class AnalysisResult:
     title: str
     summary: str
     is_ad: bool = False
+    category: str = "Другое"

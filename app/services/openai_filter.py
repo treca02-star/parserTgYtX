@@ -35,6 +35,18 @@ class ContentAnalyzer:
                     "Не упоминай вложения, ссылки и дополнительные материалы в summary: "
                     "бот добавит их отдельно. В title никогда не пиши автора, название "
                     "канала, хештег автора или конструкцию «от автора». Отдельно определи "
+                    "category — короткую категорию материала на русском языке из 1–3 слов. "
+                    "Используй наиболее точную категорию, например: Анализ BTC, Анализ ETH, "
+                    "Анализ альткоинов, Анализ рынка, Прогноз BTC, Прогноз ETH, "
+                    "Сделка на BTC, Сделка на ETH, Сделка на [тикер], Торговая идея, "
+                    "Новости крипты, Новости проекта, Новости биржи, Макроэкономика, "
+                    "Регулирование, Ончейн-анализ, Теханализ, Фундаментальный анализ, "
+                    "Обзор рынка, Видеообзор, Мнение автора, Жизненная история, Личный опыт, "
+                    "Ошибка трейдера, Портфель, Инвестиционная идея, Обучение, Интервью, "
+                    "Подкаст, Безопасность, DeFi, Airdrop, Майнинг, Ликвидации, Биржи, "
+                    "Альтсезон, Реклама или Другое. Если материал о конкретной сделке или "
+                    "активе, указывай его тикер в категории. "
+                    "Отдельно определи "
                     "is_ad и ad_confidence. Ставь is_ad=true только при высокой уверенности, "
                     "что основной смысл всего поста — явная коммерческая реклама стороннего "
                     "товара, сервиса или платной услуги. Признаки рекламы: прямой призыв "
@@ -49,7 +61,8 @@ class ContentAnalyzer:
                     "аналитики, торговой позиции или авторского мнения. Если есть сомнение, "
                     "ставь is_ad=false и "
                     "ad_confidence ниже 0.9. Верни только JSON: score (0..1), title (до 80 "
-                    "символов), summary (до 300 символов), is_ad (boolean), ad_confidence "
+                    "символов), category (1–3 слова), summary (до 300 символов), "
+                    "is_ad (boolean), ad_confidence "
                     "(0..1 — уверенность именно в том, что весь пост является рекламным). "
                     "Пиши по-русски и не давай финансовых обещаний."
                 ),
@@ -87,6 +100,7 @@ class ContentAnalyzer:
                                         "maximum": 1,
                                     },
                                     "title": {"type": "string"},
+                                    "category": {"type": "string"},
                                     "summary": {"type": "string"},
                                     "is_ad": {"type": "boolean"},
                                     "ad_confidence": {
@@ -98,6 +112,7 @@ class ContentAnalyzer:
                                 "required": [
                                     "score",
                                     "title",
+                                    "category",
                                     "summary",
                                     "is_ad",
                                     "ad_confidence",
@@ -107,7 +122,7 @@ class ContentAnalyzer:
                         },
                     },
                 ),
-                max_tokens=300,
+                max_tokens=350,
                 temperature=0.1,
             )
             try:
@@ -134,6 +149,7 @@ class ContentAnalyzer:
             title=self._clean_title(str(data["title"]), item.author),
             summary=str(data["summary"])[:1000],
             is_ad=is_ad,
+            category=self._clean_category(str(data["category"]), is_ad),
         )
 
     @staticmethod
@@ -145,7 +161,14 @@ class ContentAnalyzer:
             data = data[0]
         if not isinstance(data, dict):
             raise TypeError("AI response must be a JSON object")
-        for field in ("score", "title", "summary", "is_ad", "ad_confidence"):
+        for field in (
+            "score",
+            "title",
+            "category",
+            "summary",
+            "is_ad",
+            "ad_confidence",
+        ):
             if field not in data:
                 raise KeyError(field)
         return data
@@ -154,6 +177,14 @@ class ContentAnalyzer:
     def _is_confident_ad(data: dict[str, Any]) -> bool:
         confidence = max(0.0, min(1.0, float(str(data["ad_confidence"]))))
         return bool(data["is_ad"]) and confidence >= 0.9
+
+    @staticmethod
+    def _clean_category(category: str, is_ad: bool = False) -> str:
+        if is_ad:
+            return "Реклама"
+        cleaned = re.sub(r"\s+", " ", category).strip(" .,:;|—–-")
+        words = cleaned.split()
+        return " ".join(words[:3])[:50] or "Другое"
 
     @staticmethod
     def _media_context(item: NormalizedItem) -> str:

@@ -65,7 +65,8 @@ def test_ai_media_context_describes_attachments_and_youtube_links() -> None:
 
 def test_ai_response_accepts_single_object_array() -> None:
     result = ContentAnalyzer._decode_response(
-        '[{"score": 0.8, "title": "Тема", "summary": "Описание", '
+        '[{"score": 0.8, "title": "Тема", "category": "Анализ BTC", '
+        '"summary": "Описание", '
         '"is_ad": false, "ad_confidence": 0.1}]'
     )
 
@@ -76,7 +77,8 @@ def test_ai_response_accepts_single_object_array() -> None:
 def test_ai_response_requires_ad_confidence() -> None:
     try:
         ContentAnalyzer._decode_response(
-            '{"score": 0.8, "title": "Тема", "summary": "Описание", "is_ad": true}'
+            '{"score": 0.8, "title": "Тема", "category": "Реклама", '
+            '"summary": "Описание", "is_ad": true}'
         )
     except KeyError as error:
         assert error.args == ("ad_confidence",)
@@ -88,6 +90,14 @@ def test_ad_requires_high_confidence() -> None:
     assert ContentAnalyzer._is_confident_ad({"is_ad": True, "ad_confidence": 0.9})
     assert not ContentAnalyzer._is_confident_ad({"is_ad": True, "ad_confidence": 0.89})
     assert not ContentAnalyzer._is_confident_ad({"is_ad": False, "ad_confidence": 1})
+
+
+def test_category_is_short_and_ads_are_forced_to_advertising() -> None:
+    assert ContentAnalyzer._clean_category("  Сделка   на   ETH  ") == "Сделка на ETH"
+    assert ContentAnalyzer._clean_category("Очень длинная категория из многих слов") == (
+        "Очень длинная категория"
+    )
+    assert ContentAnalyzer._clean_category("Анализ BTC", is_ad=True) == "Реклама"
 
 
 def test_ai_title_removes_repeated_author() -> None:
@@ -126,6 +136,7 @@ def test_sent_card_keeps_only_link_button() -> None:
         external_id="abc",
         author="Author",
         title="Title",
+        category="Видеообзор",
         summary="Summary",
         content="",
         url="https://youtube.com/watch?v=abc",
@@ -138,7 +149,8 @@ def test_sent_card_keeps_only_link_button() -> None:
     assert keyboard.inline_keyboard[0][1].callback_data == "download:7"
     card = format_card(item, sent=True)
     assert '<a href="https://youtube.com/watch?v=abc">Источник</a>' in card
-    assert card.index("Источник") < card.index("Релевантность")
+    assert "Видеообзор" in card
+    assert "Релевантность" not in card
     assert "Передано в обработку" in card
 
 
@@ -149,6 +161,7 @@ def test_processing_card_shows_progress_and_disables_publish() -> None:
         external_id="processing",
         author="#Канал",
         title="Прогноз BTC",
+        category="Прогноз BTC",
         summary="Описание",
         content="",
         url="https://t.me/source/10",
@@ -177,6 +190,7 @@ def test_card_uses_short_media_notes() -> None:
         external_id="post",
         author="#Trader8020",
         title="Обзор рынка",
+        category="Анализ рынка",
         summary="Краткое описание.",
         content="",
         media_type="voice",
@@ -188,6 +202,8 @@ def test_card_uses_short_media_notes() -> None:
     assert media_notes(item) == "🎙 Голосовое сообщение"
     card = format_card(item)
     assert "#Trader8020 | Обзор рынка | Пост TG" in card
+    assert "Анализ рынка" in card
+    assert "Релевантность" not in card
     assert "прикреплено голосовое" not in card
 
 
@@ -198,6 +214,7 @@ def test_ad_card_is_one_line() -> None:
         external_id="ad",
         author="#Канал",
         title="Реклама VPN",
+        category="Реклама",
         summary="Большое рекламное описание.",
         content="",
         media_type="none",

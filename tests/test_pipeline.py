@@ -14,7 +14,13 @@ class FakeAnalyzer:
     async def analyze(
         self, item: NormalizedItem, mode: str, custom_prompt: str
     ) -> AnalysisResult:
-        return AnalysisResult(True, 0.9, item.title_hint or "Тема", "Краткое описание")
+        return AnalysisResult(
+            True,
+            0.9,
+            item.title_hint or "Тема",
+            "Краткое описание",
+            category="Анализ рынка",
+        )
 
 
 class FakeAdAnalyzer:

@@ -76,8 +76,8 @@ def format_card(
     notes_block = f"\n\n{notes}" if notes else ""
     return (
         f"<b>{escape(item.author)} | {escape(item.title)} | {type_name}</b>\n\n"
-        f"{escape(item.summary)}{notes_block}{source}\n\n"
-        f"Релевантность: {item.relevance:.0%}{state}"
+        f"{escape(item.category or 'Другое')}\n\n"
+        f"{escape(item.summary)}{notes_block}{source}{state}"
     )
 
 
@@ -109,6 +109,7 @@ class ContentPipeline:
             external_id=incoming.external_id,
             author=incoming.author,
             title=analysis.title,
+            category=analysis.category,
             summary=analysis.summary,
             content=incoming.content,
             media_type=incoming.media_type,
@@ -145,6 +146,7 @@ class ContentPipeline:
             (item.title_hint or item.content)[:80],
             "Не удалось обработать материал с помощью AI",
             False,
+            "Другое",
         )
 
     async def publish(self, session: AsyncSession, item_id: int) -> tuple[ContentItem, bool]:

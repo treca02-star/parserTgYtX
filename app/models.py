@@ -52,6 +52,7 @@ class ContentItem(Base):
     external_id: Mapped[str] = mapped_column(String(255))
     author: Mapped[str] = mapped_column(String(255))
     title: Mapped[str] = mapped_column(String(255))
+    category: Mapped[str] = mapped_column(String(50), default="Другое")
     summary: Mapped[str] = mapped_column(Text, default="")
     content: Mapped[str] = mapped_column(Text, default="")
     media_type: Mapped[str] = mapped_column(String(20), default="none")
