@@ -19,44 +19,49 @@ class ContentAnalyzer:
         )
         self.model = model
 
-    async def analyze(
-        self, item: NormalizedItem, mode: str, custom_prompt: str
-    ) -> AnalysisResult:
+    async def analyze(self, item: NormalizedItem, mode: str, custom_prompt: str) -> AnalysisResult:
         media_context = self._media_context(item)
         messages = [
-                {
-                    "role": "system",
-                    "content": (
-                        "Ты редактор русскоязычного криптоканала. Оцени, насколько материал "
-                        "соответствует критериям пользователя: score=1 означает полное "
-                        "соответствие, score=0 — отсутствие соответствия. Не снижай оценку "
-                        "из-за неопределенности прогноза или отсутствия доказательств: оценивай "
-                        "тему и содержание, а не достоверность инвестиционного тезиса. "
-                        "Кратко опиши, о чем материал. Если переданы сведения о вложениях или "
-                        "YouTube-ссылках, используй их только для понимания контекста и оценки. "
-                        "Не упоминай вложения, ссылки и дополнительные материалы в summary: "
-                        "бот добавит их отдельно. В title никогда не пиши автора, название "
-                        "канала, хештег автора или конструкцию «от автора». Отдельно определи "
-                        "is_ad. Ставь is_ad=true, только если основной смысл поста — явное "
-                        "продвижение продукта, сервиса, канала, платной услуги, регистрации, "
-                        "покупки, промокода или рекламной интеграции. Обычные ссылки на биржи, "
-                        "партнерские ссылки и подписи в конце тематического поста сами по себе "
-                        "не являются рекламным постом. Верни только JSON: score (0..1), "
-                        "title (до 80 символов), summary (до 300 символов), is_ad (boolean). "
-                        "Пиши по-русски и не давай финансовых обещаний."
-                    ),
-                },
-                {
-                    "role": "user",
-                    "content": (
-                        f"Критерии: {custom_prompt}\n"
-                        f"Источник: {item.kind}\n"
-                        f"Автор: {item.author}\n"
-                        f"Технические сведения: {media_context}\n"
-                        f"Текст материала:\n{item.content[:12000]}"
-                    ),
-                },
-            ]
+            {
+                "role": "system",
+                "content": (
+                    "Ты редактор русскоязычного криптоканала. Оцени, насколько материал "
+                    "соответствует критериям пользователя: score=1 означает полное "
+                    "соответствие, score=0 — отсутствие соответствия. Не снижай оценку "
+                    "из-за неопределенности прогноза или отсутствия доказательств: оценивай "
+                    "тему и содержание, а не достоверность инвестиционного тезиса. "
+                    "Кратко опиши, о чем материал. Если переданы сведения о вложениях или "
+                    "YouTube-ссылках, используй их только для понимания контекста и оценки. "
+                    "Не упоминай вложения, ссылки и дополнительные материалы в summary: "
+                    "бот добавит их отдельно. В title никогда не пиши автора, название "
+                    "канала, хештег автора или конструкцию «от автора». Отдельно определи "
+                    "is_ad и ad_confidence. Ставь is_ad=true только при высокой уверенности, "
+                    "что основной смысл всего поста — явная коммерческая реклама стороннего "
+                    "товара, сервиса или платной услуги. Признаки рекламы: прямой призыв "
+                    "купить или зарегистрироваться, промокод или скидка, раскрытие рекламной "
+                    "интеграции, перечисление преимуществ и цены продвигаемого предложения. "
+                    "Не считай рекламой новости, аналитику, торговые идеи, обзоры рынка, "
+                    "анонсы и ссылки на собственные YouTube-видео, подкасты, эфиры или канал "
+                    "автора. Ссылки на биржи, партнерские ссылки, реферальные коды и рекламные "
+                    "подписи в конце полезного тематического поста сами по себе не делают "
+                    "весь пост рекламным. Если есть сомнение, ставь is_ad=false и "
+                    "ad_confidence ниже 0.9. Верни только JSON: score (0..1), title (до 80 "
+                    "символов), summary (до 300 символов), is_ad (boolean), ad_confidence "
+                    "(0..1 — уверенность именно в том, что весь пост является рекламным). "
+                    "Пиши по-русски и не давай финансовых обещаний."
+                ),
+            },
+            {
+                "role": "user",
+                "content": (
+                    f"Критерии: {custom_prompt}\n"
+                    f"Источник: {item.kind}\n"
+                    f"Автор: {item.author}\n"
+                    f"Технические сведения: {media_context}\n"
+                    f"Текст материала:\n{item.content[:12000]}"
+                ),
+            },
+        ]
         data = None
         last_error: Exception | None = None
         for _ in range(2):
@@ -81,8 +86,19 @@ class ContentAnalyzer:
                                     "title": {"type": "string"},
                                     "summary": {"type": "string"},
                                     "is_ad": {"type": "boolean"},
+                                    "ad_confidence": {
+                                        "type": "number",
+                                        "minimum": 0,
+                                        "maximum": 1,
+                                    },
                                 },
-                                "required": ["score", "title", "summary", "is_ad"],
+                                "required": [
+                                    "score",
+                                    "title",
+                                    "summary",
+                                    "is_ad",
+                                    "ad_confidence",
+                                ],
                                 "additionalProperties": False,
                             },
                         },
@@ -108,7 +124,7 @@ class ContentAnalyzer:
         if data is None:
             raise ValueError("AI provider returned invalid JSON") from last_error
         score = max(0.0, min(1.0, float(str(data["score"]))))
-        is_ad = bool(data["is_ad"])
+        is_ad = self._is_confident_ad(data)
         return AnalysisResult(
             relevant=is_ad or mode == "all" or score >= THRESHOLDS[mode],
             score=score,
@@ -126,10 +142,15 @@ class ContentAnalyzer:
             data = data[0]
         if not isinstance(data, dict):
             raise TypeError("AI response must be a JSON object")
-        for field in ("score", "title", "summary", "is_ad"):
+        for field in ("score", "title", "summary", "is_ad", "ad_confidence"):
             if field not in data:
                 raise KeyError(field)
         return data
+
+    @staticmethod
+    def _is_confident_ad(data: dict[str, Any]) -> bool:
+        confidence = max(0.0, min(1.0, float(str(data["ad_confidence"]))))
+        return bool(data["is_ad"]) and confidence >= 0.9
 
     @staticmethod
     def _media_context(item: NormalizedItem) -> str:

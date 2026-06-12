@@ -35,11 +35,29 @@ def test_ai_media_context_describes_attachments_and_youtube_links() -> None:
 
 def test_ai_response_accepts_single_object_array() -> None:
     result = ContentAnalyzer._decode_response(
-        '[{"score": 0.8, "title": "Тема", "summary": "Описание", "is_ad": false}]'
+        '[{"score": 0.8, "title": "Тема", "summary": "Описание", '
+        '"is_ad": false, "ad_confidence": 0.1}]'
     )
 
     assert result["score"] == 0.8
     assert result["title"] == "Тема"
+
+
+def test_ai_response_requires_ad_confidence() -> None:
+    try:
+        ContentAnalyzer._decode_response(
+            '{"score": 0.8, "title": "Тема", "summary": "Описание", "is_ad": true}'
+        )
+    except KeyError as error:
+        assert error.args == ("ad_confidence",)
+    else:
+        raise AssertionError("ad_confidence must be required")
+
+
+def test_ad_requires_high_confidence() -> None:
+    assert ContentAnalyzer._is_confident_ad({"is_ad": True, "ad_confidence": 0.9})
+    assert not ContentAnalyzer._is_confident_ad({"is_ad": True, "ad_confidence": 0.89})
+    assert not ContentAnalyzer._is_confident_ad({"is_ad": False, "ad_confidence": 1})
 
 
 def test_ai_title_removes_repeated_author() -> None:
