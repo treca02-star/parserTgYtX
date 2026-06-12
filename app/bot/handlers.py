@@ -380,10 +380,24 @@ async def publish_item(
         await callback.answer("Нет доступа", show_alert=True)
         return
     await callback.answer("Передаю в обработку…")
+    if callback_data(callback) == "publish:processing":
+        return
+    item_id = int(callback_data(callback).split(":", 1)[1])
+    item = await session.get(ContentItem, item_id)
+    if item is None:
+        await callback_message(callback).answer("Материал не найден.")
+        return
+    await callback_message(callback).edit_text(
+        format_card(item, processing=True),
+        reply_markup=item_keyboard(
+            item.id,
+            item.url,
+            item.media_type,
+            processing=True,
+        ),
+    )
     try:
-        item, published = await pipeline.publish(
-            session, int(callback_data(callback).split(":", 1)[1])
-        )
+        item, published = await pipeline.publish(session, item_id)
         await callback_message(callback).edit_text(
             format_card(item, sent=True),
             reply_markup=item_keyboard(
@@ -394,6 +408,10 @@ async def publish_item(
             await callback_message(callback).answer("Этот материал уже был передан.")
     except TelegramAPIError:
         await session.rollback()
+        await callback_message(callback).edit_text(
+            format_card(item),
+            reply_markup=item_keyboard(item.id, item.url, item.media_type),
+        )
         await callback_message(callback).answer(
             "❌ Не удалось передать материал. Проверьте права бота и повторите."
         )

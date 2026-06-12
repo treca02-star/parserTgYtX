@@ -33,9 +33,14 @@ def item_keyboard(
     url: str,
     media_type: str = "none",
     sent: bool = False,
+    processing: bool = False,
 ) -> InlineKeyboardMarkup:
     row = []
-    if not sent:
+    if processing:
+        row.append(
+            InlineKeyboardButton(text="⏳ Передаю…", callback_data="publish:processing")
+        )
+    elif not sent:
         row.append(
             InlineKeyboardButton(text="✅ Сделать пост", callback_data=f"publish:{item_id}")
         )
@@ -48,12 +53,20 @@ def item_keyboard(
     return InlineKeyboardMarkup(inline_keyboard=[row])
 
 
-def format_card(item: ContentItem, sent: bool = False) -> str:
+def format_card(
+    item: ContentItem,
+    sent: bool = False,
+    processing: bool = False,
+) -> str:
+    if processing:
+        state = "\n\n⏳ <b>Передача: ■■■□□ 60%</b>"
+    elif sent:
+        state = "\n\n✅ <b>Передано в обработку</b>"
+    else:
+        state = ""
     if item.is_ad:
-        state = "\n\n✅ <b>Передано в обработку</b>" if sent else ""
         return f"<b>{escape(item.author)} | Рекламный пост</b>{state}"
     type_name = "YouTube" if item.kind == "youtube" else "Пост TG"
-    state = "\n\n✅ <b>Передано в обработку</b>" if sent else ""
     source = (
         f'\n\n<a href="{escape(item.url, quote=True)}">Источник</a>'
         if item.url

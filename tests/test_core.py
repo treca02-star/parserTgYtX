@@ -112,6 +112,34 @@ def test_sent_card_keeps_only_link_button() -> None:
     assert "Передано в обработку" in card
 
 
+def test_processing_card_shows_progress_and_disables_publish() -> None:
+    item = ContentItem(
+        id=10,
+        kind="telegram",
+        external_id="processing",
+        author="#Канал",
+        title="Прогноз BTC",
+        summary="Описание",
+        content="",
+        url="https://t.me/source/10",
+        relevance=1,
+        status="new",
+    )
+
+    card = format_card(item, processing=True)
+    keyboard = item_keyboard(
+        item.id,
+        item.url,
+        item.media_type,
+        processing=True,
+    )
+
+    assert "■■■□□ 60%" in card
+    assert keyboard.inline_keyboard[0][0].text == "⏳ Передаю…"
+    assert keyboard.inline_keyboard[0][0].callback_data == "publish:processing"
+    assert keyboard.inline_keyboard[0][1].url == item.url
+
+
 def test_card_uses_short_media_notes() -> None:
     item = ContentItem(
         id=8,
