@@ -35,7 +35,7 @@ def test_ai_media_context_describes_attachments_and_youtube_links() -> None:
 
 def test_ai_response_accepts_single_object_array() -> None:
     result = ContentAnalyzer._decode_response(
-        '[{"score": 0.8, "title": "Тема", "summary": "Описание"}]'
+        '[{"score": 0.8, "title": "Тема", "summary": "Описание", "is_ad": false}]'
     )
 
     assert result["score"] == 0.8
@@ -113,3 +113,22 @@ def test_card_uses_short_media_notes() -> None:
     card = format_card(item)
     assert "#Trader8020 | Обзор рынка | Пост TG" in card
     assert "прикреплено голосовое" not in card
+
+
+def test_ad_card_is_one_line() -> None:
+    item = ContentItem(
+        id=9,
+        kind="telegram",
+        external_id="ad",
+        author="#Канал",
+        title="Реклама VPN",
+        summary="Большое рекламное описание.",
+        content="",
+        media_type="none",
+        is_ad=True,
+        url="https://t.me/source/2",
+        relevance=0.1,
+        status="new",
+    )
+
+    assert format_card(item) == "<b>#Канал | Рекламный пост</b>"

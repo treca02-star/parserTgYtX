@@ -49,6 +49,9 @@ def item_keyboard(
 
 
 def format_card(item: ContentItem, sent: bool = False) -> str:
+    if item.is_ad:
+        state = "\n\n✅ <b>Передано в обработку</b>" if sent else ""
+        return f"<b>{escape(item.author)} | Рекламный пост</b>{state}"
     type_name = "YouTube" if item.kind == "youtube" else "Пост TG"
     state = "\n\n✅ <b>Передано в обработку</b>" if sent else ""
     source = (
@@ -96,6 +99,7 @@ class ContentPipeline:
             summary=analysis.summary,
             content=incoming.content,
             media_type=incoming.media_type,
+            is_ad=analysis.is_ad,
             url=incoming.url,
             source_chat_id=incoming.source_chat_id,
             source_message_id=incoming.source_message_id,
@@ -127,6 +131,7 @@ class ContentPipeline:
             0.5,
             (item.title_hint or item.content)[:80],
             "Не удалось обработать материал с помощью AI",
+            False,
         )
 
     async def publish(self, session: AsyncSession, item_id: int) -> tuple[ContentItem, bool]:

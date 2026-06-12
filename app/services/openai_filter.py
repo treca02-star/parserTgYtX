@@ -36,8 +36,13 @@ class ContentAnalyzer:
                         "YouTube-ссылках, используй их только для понимания контекста и оценки. "
                         "Не упоминай вложения, ссылки и дополнительные материалы в summary: "
                         "бот добавит их отдельно. В title никогда не пиши автора, название "
-                        "канала, хештег автора или конструкцию «от автора». Верни только JSON: "
-                        "score (0..1), title (до 80 символов), summary (до 300 символов). "
+                        "канала, хештег автора или конструкцию «от автора». Отдельно определи "
+                        "is_ad. Ставь is_ad=true, только если основной смысл поста — явное "
+                        "продвижение продукта, сервиса, канала, платной услуги, регистрации, "
+                        "покупки, промокода или рекламной интеграции. Обычные ссылки на биржи, "
+                        "партнерские ссылки и подписи в конце тематического поста сами по себе "
+                        "не являются рекламным постом. Верни только JSON: score (0..1), "
+                        "title (до 80 символов), summary (до 300 символов), is_ad (boolean). "
                         "Пиши по-русски и не давай финансовых обещаний."
                     ),
                 },
@@ -75,8 +80,9 @@ class ContentAnalyzer:
                                     },
                                     "title": {"type": "string"},
                                     "summary": {"type": "string"},
+                                    "is_ad": {"type": "boolean"},
                                 },
-                                "required": ["score", "title", "summary"],
+                                "required": ["score", "title", "summary", "is_ad"],
                                 "additionalProperties": False,
                             },
                         },
@@ -102,11 +108,13 @@ class ContentAnalyzer:
         if data is None:
             raise ValueError("AI provider returned invalid JSON") from last_error
         score = max(0.0, min(1.0, float(str(data["score"]))))
+        is_ad = bool(data["is_ad"])
         return AnalysisResult(
-            relevant=mode == "all" or score >= THRESHOLDS[mode],
+            relevant=is_ad or mode == "all" or score >= THRESHOLDS[mode],
             score=score,
             title=self._clean_title(str(data["title"]), item.author),
             summary=str(data["summary"])[:1000],
+            is_ad=is_ad,
         )
 
     @staticmethod
@@ -118,7 +126,7 @@ class ContentAnalyzer:
             data = data[0]
         if not isinstance(data, dict):
             raise TypeError("AI response must be a JSON object")
-        for field in ("score", "title", "summary"):
+        for field in ("score", "title", "summary", "is_ad"):
             if field not in data:
                 raise KeyError(field)
         return data

@@ -55,6 +55,7 @@ class ContentItem(Base):
     summary: Mapped[str] = mapped_column(Text, default="")
     content: Mapped[str] = mapped_column(Text, default="")
     media_type: Mapped[str] = mapped_column(String(20), default="none")
+    is_ad: Mapped[bool] = mapped_column(Boolean, default=False)
     url: Mapped[str] = mapped_column(Text)
     source_chat_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     source_message_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)

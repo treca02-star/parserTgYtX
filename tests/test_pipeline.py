@@ -17,6 +17,13 @@ class FakeAnalyzer:
         return AnalysisResult(True, 0.9, item.title_hint or "Тема", "Краткое описание")
 
 
+class FakeAdAnalyzer:
+    async def analyze(
+        self, item: NormalizedItem, mode: str, custom_prompt: str
+    ) -> AnalysisResult:
+        return AnalysisResult(True, 0.1, "Реклама", "Описание", True)
+
+
 @pytest.fixture
 async def session_factory():
     engine = create_async_engine("sqlite+aiosqlite:///:memory:")
@@ -74,3 +81,24 @@ async def test_publish_is_idempotent(session_factory) -> None:
     assert first is True
     assert second is False
     bot.copy_message.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_ad_is_delivered_as_compact_card(session_factory) -> None:
+    bot = AsyncMock()
+    bot.send_message.return_value = SimpleNamespace(message_id=101)
+    pipeline = ContentPipeline(bot, FakeAdAnalyzer(), get_settings())  # type: ignore[arg-type]
+    incoming = NormalizedItem(
+        kind="telegram",
+        external_id="-1001:11",
+        author="#Канал",
+        content="Покупайте VPN по промокоду.",
+        url="https://t.me/channel/11",
+    )
+
+    async with session_factory() as session:
+        item = await pipeline.ingest(session, incoming)
+
+    assert item is not None
+    assert item.is_ad is True
+    assert bot.send_message.await_args.args[1] == "<b>#Канал | Рекламный пост</b>"

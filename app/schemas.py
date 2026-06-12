@@ -21,3 +21,4 @@ class AnalysisResult:
     score: float
     title: str
     summary: str
+    is_ad: bool = False
