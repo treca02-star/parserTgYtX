@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -6,8 +7,10 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.config import get_settings
 from app.db import Base
+from app.models import ContentItem
 from app.schemas import AnalysisResult, NormalizedItem
 from app.services.content import ContentPipeline
+from app.services.deferred import send_deferred_reminder
 
 
 class FakeAnalyzer:
@@ -81,11 +84,15 @@ async def test_publish_is_idempotent(session_factory) -> None:
     async with session_factory() as session:
         item = await pipeline.ingest(session, incoming)
         assert item is not None
+        item.status = "deferred"
+        item.deferred_at = datetime.now(UTC)
+        await session.commit()
         _, first = await pipeline.publish(session, item.id)
         _, second = await pipeline.publish(session, item.id)
 
     assert first is True
     assert second is False
+    assert item.deferred_at is None
     bot.copy_message.assert_awaited_once()
 
 
@@ -108,3 +115,31 @@ async def test_ad_is_delivered_as_compact_card(session_factory) -> None:
     assert item is not None
     assert item.is_ad is True
     assert bot.send_message.await_args.args[1] == "<b>#Канал | Рекламный пост</b>"
+
+
+@pytest.mark.asyncio
+async def test_deferred_reminder_reports_queue_size(session_factory) -> None:
+    bot = AsyncMock()
+    async with session_factory() as session:
+        session.add(
+            ContentItem(
+                kind="telegram",
+                external_id="deferred-1",
+                author="#Канал",
+                title="Тема",
+                category="Новости крипты",
+                summary="Описание",
+                content="",
+                url="https://t.me/source/1",
+                relevance=1,
+                status="deferred",
+            )
+        )
+        await session.commit()
+
+    count = await send_deferred_reminder(bot, session_factory, get_settings())
+
+    assert count == 1
+    assert "В отложке 1 материалов" in bot.send_message.await_args.args[1]
+    keyboard = bot.send_message.await_args.kwargs["reply_markup"]
+    assert keyboard.inline_keyboard[0][0].callback_data == "menu:deferred"

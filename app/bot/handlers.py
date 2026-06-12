@@ -1,5 +1,6 @@
 import logging
 import re
+from datetime import UTC, datetime
 from typing import cast
 
 from aiogram import F, Router
@@ -16,7 +17,7 @@ from aiogram.types import (
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.bot.keyboards import back_menu, filter_menu, main_menu, sources_menu
+from app.bot.keyboards import back_menu, filter_menu, main_menu, settings_menu, sources_menu
 from app.config import Settings
 from app.models import AppSettings, ContentItem, Source
 from app.schemas import NormalizedItem
@@ -38,6 +39,7 @@ NEXT_SOURCE_MODE = {"all": "long", "long": "shorts", "shorts": "off", "off": "al
 class Form(StatesGroup):
     youtube_url = State()
     filter_prompt = State()
+    deferred_reminder_time = State()
 
 
 def allowed(user_id: int | None, settings: Settings) -> bool:
@@ -77,6 +79,44 @@ async def edit_callback_safely(
         await callback_message(callback).edit_text(text, reply_markup=reply_markup)
     except TelegramBadRequest as error:
         if "message is not modified" not in str(error).lower():
+            raise
+
+
+async def update_original_card(
+    callback: CallbackQuery,
+    item: ContentItem,
+    settings: Settings,
+    *,
+    sent: bool = False,
+    deferred: bool = False,
+    dismissed: bool = False,
+) -> None:
+    message = callback_message(callback)
+    if not item.review_message_id or item.review_message_id == message.message_id:
+        return
+    if message.bot is None:
+        return
+    try:
+        await message.bot.edit_message_text(
+            format_card(
+                item,
+                sent=sent,
+                deferred=deferred,
+                dismissed=dismissed,
+            ),
+            chat_id=settings.telegram_owner_id,
+            message_id=item.review_message_id,
+            reply_markup=item_keyboard(
+                item.id,
+                item.url,
+                item.media_type,
+                sent=sent or dismissed,
+                deferred=deferred,
+            ),
+        )
+    except TelegramBadRequest as error:
+        text = str(error).lower()
+        if "message is not modified" not in text and "message to edit not found" not in text:
             raise
 
 
@@ -349,6 +389,7 @@ async def menu_stats(
     await callback_message(callback).edit_text(
         "<b>📊 Статистика</b>\n\n"
         f"Новые: {counts.get('new', 0)}\n"
+        f"Отложено: {counts.get('deferred', 0)}\n"
         f"Отфильтровано: {counts.get('filtered', 0)}\n"
         f"Передано в обработку: {counts.get('sent', 0)}",
         reply_markup=back_menu(),
@@ -382,18 +423,153 @@ async def menu_feed(
     await callback.answer()
 
 
+@router.callback_query(F.data == "menu:deferred")
+async def menu_deferred(
+    callback: CallbackQuery, session: AsyncSession, settings: Settings
+) -> None:
+    if not allowed(callback.from_user.id, settings):
+        await answer_callback_safely(callback, "Нет доступа", show_alert=True)
+        return
+    count = int(
+        await session.scalar(
+            select(func.count()).select_from(ContentItem).where(
+                ContentItem.status == "deferred"
+            )
+        )
+        or 0
+    )
+    items = (
+        await session.scalars(
+            select(ContentItem)
+            .where(ContentItem.status == "deferred")
+            .order_by(ContentItem.deferred_at.desc(), ContentItem.id.desc())
+            .limit(20)
+        )
+    ).all()
+    await callback_message(callback).edit_text(
+        f"<b>🕓 Отложка</b>\n\nМатериалов: {count}",
+        reply_markup=back_menu(),
+    )
+    for item in items:
+        await callback_message(callback).answer(
+            format_card(item, deferred=True),
+            reply_markup=item_keyboard(
+                item.id,
+                item.url,
+                item.media_type,
+                deferred=True,
+            ),
+        )
+    await answer_callback_safely(callback)
+
+
 @router.callback_query(F.data == "menu:settings")
-async def menu_settings(callback: CallbackQuery, settings: Settings) -> None:
+async def menu_settings(
+    callback: CallbackQuery, session: AsyncSession, settings: Settings
+) -> None:
     if not allowed(callback.from_user.id, settings):
         return
+    app_settings = await ensure_app_settings(session, settings)
     await callback_message(callback).edit_text(
         "<b>⚙️ Настройки</b>\n\n"
         f"Входящий канал: <code>{settings.telegram_inbox_chat_id}</code>\n"
-        f"Группа обработки: <code>{settings.telegram_output_chat_id}</code>\n\n"
-        "Эти значения меняются в <code>.env</code> на сервере.",
-        reply_markup=back_menu(),
+        f"Группа обработки: <code>{settings.telegram_output_chat_id}</code>\n"
+        f"Напоминание об отложке: <b>{app_settings.deferred_reminder_time} МСК</b>",
+        reply_markup=settings_menu(),
     )
     await callback.answer()
+
+
+@router.callback_query(F.data == "settings:deferred-time")
+async def deferred_reminder_time_prompt(
+    callback: CallbackQuery, state: FSMContext, settings: Settings
+) -> None:
+    if not allowed(callback.from_user.id, settings):
+        await answer_callback_safely(callback, "Нет доступа", show_alert=True)
+        return
+    await state.set_state(Form.deferred_reminder_time)
+    await callback_message(callback).edit_text(
+        "Отправьте время ежедневного напоминания по Москве в формате "
+        "<code>18:00</code>.",
+        reply_markup=back_menu(),
+    )
+    await answer_callback_safely(callback)
+
+
+@router.message(Form.deferred_reminder_time)
+async def deferred_reminder_time_value(
+    message: Message,
+    state: FSMContext,
+    session: AsyncSession,
+    settings: Settings,
+) -> None:
+    if not allowed(message.from_user.id if message.from_user else None, settings):
+        return
+    value = (message.text or "").strip()
+    match = re.fullmatch(r"([01]\d|2[0-3]):([0-5]\d)", value)
+    if not match:
+        await message.answer(
+            "❌ Неверный формат. Отправьте время, например <code>18:00</code>.",
+            reply_markup=back_menu(),
+        )
+        return
+    app_settings = await ensure_app_settings(session, settings)
+    app_settings.deferred_reminder_time = value
+    await session.commit()
+    await state.clear()
+    await message.answer(
+        f"✅ Напоминание установлено на <b>{value} МСК</b>.",
+        reply_markup=settings_menu(),
+    )
+
+
+@router.callback_query(F.data.startswith("defer:add:"))
+async def defer_item(
+    callback: CallbackQuery, session: AsyncSession, settings: Settings
+) -> None:
+    if not allowed(callback.from_user.id, settings):
+        await answer_callback_safely(callback, "Нет доступа", show_alert=True)
+        return
+    item = await session.get(ContentItem, int(callback_data(callback).rsplit(":", 1)[1]))
+    if item is None:
+        await answer_callback_safely(callback, "Материал не найден", show_alert=True)
+        return
+    if item.status == "sent":
+        await answer_callback_safely(callback, "Материал уже передан", show_alert=True)
+        return
+    item.status = "deferred"
+    item.deferred_at = datetime.now(UTC)
+    await session.commit()
+    await edit_callback_safely(
+        callback,
+        format_card(item, deferred=True),
+        item_keyboard(item.id, item.url, item.media_type, deferred=True),
+    )
+    await update_original_card(callback, item, settings, deferred=True)
+    await answer_callback_safely(callback, "Добавлено в отложку")
+
+
+@router.callback_query(F.data.startswith("defer:cancel:"))
+async def cancel_deferred_item(
+    callback: CallbackQuery, session: AsyncSession, settings: Settings
+) -> None:
+    if not allowed(callback.from_user.id, settings):
+        await answer_callback_safely(callback, "Нет доступа", show_alert=True)
+        return
+    item = await session.get(ContentItem, int(callback_data(callback).rsplit(":", 1)[1]))
+    if item is None:
+        await answer_callback_safely(callback, "Материал не найден", show_alert=True)
+        return
+    item.status = "dismissed"
+    item.deferred_at = None
+    await session.commit()
+    await edit_callback_safely(
+        callback,
+        format_card(item, dismissed=True),
+        item_keyboard(item.id, item.url, item.media_type, sent=True),
+    )
+    await update_original_card(callback, item, settings, dismissed=True)
+    await answer_callback_safely(callback, "Убрано из отложки")
 
 
 @router.callback_query(F.data.startswith("publish:"))
@@ -415,6 +591,7 @@ async def publish_item(
             format_card(item, sent=True),
             item_keyboard(item.id, item.url, item.media_type, sent=True),
         )
+        await update_original_card(callback, item, settings, sent=True)
         return
     await edit_callback_safely(
         callback,
@@ -426,6 +603,7 @@ async def publish_item(
             processing=True,
         ),
     )
+    was_deferred = item.status == "deferred"
     try:
         item, published = await pipeline.publish(session, item_id)
         await edit_callback_safely(
@@ -433,14 +611,23 @@ async def publish_item(
             format_card(item, sent=True),
             item_keyboard(item.id, item.url, item.media_type, sent=True),
         )
+        await update_original_card(callback, item, settings, sent=True)
         if not published:
             await callback_message(callback).answer("Этот материал уже был передан.")
     except TelegramAPIError:
         await session.rollback()
+        item = await session.get(ContentItem, item_id)
+        if item is None:
+            return
         await edit_callback_safely(
             callback,
-            format_card(item),
-            item_keyboard(item.id, item.url, item.media_type),
+            format_card(item, deferred=was_deferred),
+            item_keyboard(
+                item.id,
+                item.url,
+                item.media_type,
+                deferred=was_deferred,
+            ),
         )
         await callback_message(callback).answer(
             "❌ Не удалось передать материал. Проверьте права бота и повторите."

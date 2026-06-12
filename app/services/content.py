@@ -34,6 +34,7 @@ def item_keyboard(
     media_type: str = "none",
     sent: bool = False,
     processing: bool = False,
+    deferred: bool = False,
 ) -> InlineKeyboardMarkup:
     row = []
     if processing:
@@ -44,6 +45,14 @@ def item_keyboard(
         row.append(
             InlineKeyboardButton(text="✅ Сделать пост", callback_data=f"publish:{item_id}")
         )
+        if deferred:
+            row.append(
+                InlineKeyboardButton(text="❌ Отменить", callback_data=f"defer:cancel:{item_id}")
+            )
+        else:
+            row.append(
+                InlineKeyboardButton(text="🕓 Отложить", callback_data=f"defer:add:{item_id}")
+            )
     if url:
         row.append(InlineKeyboardButton(text="🔗 Ссылка", url=url))
     if media_type == "video":
@@ -57,11 +66,17 @@ def format_card(
     item: ContentItem,
     sent: bool = False,
     processing: bool = False,
+    deferred: bool = False,
+    dismissed: bool = False,
 ) -> str:
     if processing:
         state = "\n\n⏳ <b>Передача: ■■■□□ 60%</b>"
     elif sent:
         state = "\n\n✅ <b>Передано в обработку</b>"
+    elif deferred:
+        state = "\n\n🕓 <b>Отложено</b>"
+    elif dismissed:
+        state = "\n\n❌ <b>Убрано из отложки</b>"
     else:
         state = ""
     if item.is_ad:
@@ -170,6 +185,7 @@ class ContentPipeline:
         else:
             await self.bot.send_message(self.settings.telegram_output_chat_id, item.url)
         item.status = "sent"
+        item.deferred_at = None
         item.sent_at = datetime.now(UTC)
         await session.commit()
         return item, True

@@ -16,6 +16,7 @@ from app.config import get_settings
 from app.db import SessionFactory, get_session
 from app.models import Source
 from app.services.content import ContentPipeline
+from app.services.deferred import deferred_reminder_loop
 from app.services.downloader import MediaDownloader
 from app.services.openai_filter import ContentAnalyzer
 from app.services.youtube import YouTubeService, parse_feed
@@ -36,6 +37,7 @@ pipeline = ContentPipeline(bot, analyzer, settings)
 downloader = MediaDownloader(bot, settings)
 session_dependency = Depends(get_session)
 polling_task: asyncio.Task[None] | None = None
+deferred_reminder_task: asyncio.Task[None] | None = None
 
 
 class DependenciesMiddleware(BaseMiddleware):
@@ -56,7 +58,7 @@ dispatcher.update.outer_middleware(DependenciesMiddleware())
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):  # type: ignore[no-untyped-def]
-    global polling_task
+    global deferred_reminder_task, polling_task
     await bot.set_webhook(
         settings.telegram_webhook_url,
         secret_token=settings.telegram_webhook_secret,
@@ -77,9 +79,14 @@ async def lifespan(app: FastAPI):  # type: ignore[no-untyped-def]
         except Exception:
             logging.exception("Could not renew YouTube subscription for %s", source.external_id)
     polling_task = asyncio.create_task(youtube_polling_loop())
+    deferred_reminder_task = asyncio.create_task(
+        deferred_reminder_loop(bot, SessionFactory, settings)
+    )
     yield
     if polling_task:
         polling_task.cancel()
+    if deferred_reminder_task:
+        deferred_reminder_task.cancel()
     await bot.session.close()
 
 

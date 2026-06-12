@@ -12,6 +12,7 @@ class AppSettings(Base):
     id: Mapped[int] = mapped_column(primary_key=True, default=1)
     filter_mode: Mapped[str] = mapped_column(String(20), default="medium")
     filter_prompt: Mapped[str] = mapped_column(Text, default="")
+    deferred_reminder_time: Mapped[str] = mapped_column(String(5), default="18:00")
 
 
 class Source(Base):
@@ -63,6 +64,7 @@ class ContentItem(Base):
     relevance: Mapped[float] = mapped_column(Float, default=1.0)
     status: Mapped[str] = mapped_column(String(20), default="new")
     review_message_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    deferred_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC)
     )

@@ -1,3 +1,4 @@
+from datetime import date, datetime, timedelta, timezone
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -8,6 +9,7 @@ from app.config import get_settings
 from app.models import ContentItem
 from app.schemas import NormalizedItem
 from app.services.content import format_card, item_keyboard, media_notes
+from app.services.deferred import reminder_is_due
 from app.services.openai_filter import THRESHOLDS, ContentAnalyzer
 from app.services.youtube import parse_feed
 
@@ -45,6 +47,15 @@ async def test_unchanged_callback_message_is_ignored() -> None:
 
 def test_filter_thresholds_are_ordered() -> None:
     assert THRESHOLDS["all"] < THRESHOLDS["soft"] < THRESHOLDS["medium"] < THRESHOLDS["strict"]
+
+
+def test_deferred_reminder_uses_configured_moscow_time_once_per_day() -> None:
+    moscow = timezone(timedelta(hours=3))
+
+    now = datetime(2026, 6, 12, 18, 30, tzinfo=moscow)
+    assert reminder_is_due("18:30", now)
+    assert not reminder_is_due("18:00", now)
+    assert not reminder_is_due("18:30", now, date(2026, 6, 12))
 
 
 def test_ai_media_context_describes_attachments_and_youtube_links() -> None:
@@ -181,6 +192,35 @@ def test_processing_card_shows_progress_and_disables_publish() -> None:
     assert keyboard.inline_keyboard[0][0].text == "⏳ Передаю…"
     assert keyboard.inline_keyboard[0][0].callback_data == "publish:10"
     assert keyboard.inline_keyboard[0][1].url == item.url
+
+
+def test_deferred_card_has_publish_cancel_and_link() -> None:
+    item = ContentItem(
+        id=11,
+        kind="telegram",
+        external_id="deferred",
+        author="#Канал",
+        title="Прогноз BTC",
+        category="Прогноз BTC",
+        summary="Описание",
+        content="",
+        url="https://t.me/source/11",
+        relevance=1,
+        status="deferred",
+    )
+
+    card = format_card(item, deferred=True)
+    keyboard = item_keyboard(
+        item.id,
+        item.url,
+        item.media_type,
+        deferred=True,
+    )
+
+    assert "Отложено" in card
+    assert keyboard.inline_keyboard[0][0].callback_data == "publish:11"
+    assert keyboard.inline_keyboard[0][1].callback_data == "defer:cancel:11"
+    assert keyboard.inline_keyboard[0][2].url == item.url
 
 
 def test_card_uses_short_media_notes() -> None:

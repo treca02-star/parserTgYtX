@@ -6,13 +6,16 @@ def main_menu() -> InlineKeyboardMarkup:
         inline_keyboard=[
             [
                 InlineKeyboardButton(text="📥 Лента", callback_data="menu:feed"),
-                InlineKeyboardButton(text="📺 Источники", callback_data="menu:sources"),
+                InlineKeyboardButton(text="🕓 Отложка", callback_data="menu:deferred"),
             ],
             [
+                InlineKeyboardButton(text="📺 Источники", callback_data="menu:sources"),
                 InlineKeyboardButton(text="🎯 AI-фильтр", callback_data="menu:filter"),
-                InlineKeyboardButton(text="📊 Статистика", callback_data="menu:stats"),
             ],
-            [InlineKeyboardButton(text="⚙️ Настройки", callback_data="menu:settings")],
+            [
+                InlineKeyboardButton(text="📊 Статистика", callback_data="menu:stats"),
+                InlineKeyboardButton(text="⚙️ Настройки", callback_data="menu:settings"),
+            ],
         ]
     )
 
@@ -20,6 +23,20 @@ def main_menu() -> InlineKeyboardMarkup:
 def back_menu() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[[InlineKeyboardButton(text="◀️ Главное меню", callback_data="menu:main")]]
+    )
+
+
+def settings_menu() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="🕕 Время напоминания",
+                    callback_data="settings:deferred-time",
+                )
+            ],
+            [InlineKeyboardButton(text="◀️ Главное меню", callback_data="menu:main")],
+        ]
     )
 
 
@@ -54,4 +71,3 @@ def filter_menu(current: str) -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text="◀️ Главное меню", callback_data="menu:main")],
     ]
     return InlineKeyboardMarkup(inline_keyboard=rows)
-
