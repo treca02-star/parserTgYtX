@@ -24,6 +24,7 @@ async def test_group_message_is_ingested() -> None:
         voice=None,
         entities=None,
         caption_entities=None,
+        media_group_id=None,
     )
     message.bot.get_chat.return_value = SimpleNamespace(
         invite_link="https://t.me/+private-group"
@@ -68,6 +69,7 @@ async def test_telegram_audio_is_reported_to_pipeline() -> None:
         voice=None,
         entities=None,
         caption_entities=None,
+        media_group_id=None,
     )
     message.bot.get_chat.return_value = SimpleNamespace(
         invite_link="https://t.me/+private-group"
@@ -100,47 +102,58 @@ def test_inbox_metadata_is_extracted_from_name_and_source_link() -> None:
         }
     )
 
-    author, content, source_url, extra_materials = parse_inbox_content(message)
+    author, content, source_url = parse_inbox_content(message)
 
     assert author == "#Слезы_Сатоши"
     assert content == "Разбор движения Bitcoin."
     assert source_url == "https://t.me/source/123"
-    assert extra_materials == 0
 
 
-def test_inbox_counts_hidden_material_links_except_source() -> None:
-    text = "Имя: #Trader8020\n\nМатериалы: первый, второй.\n\nИсточник"
-    message = Message.model_validate(
-        {
-            "message_id": 18,
-            "date": 0,
-            "chat": {"id": -1001, "type": "supergroup", "title": "Parser"},
-            "text": text,
-            "entities": [
-                {
-                    "type": "text_link",
-                    "offset": text.index("первый"),
-                    "length": len("первый"),
-                    "url": "https://example.com/first",
-                },
-                {
-                    "type": "text_link",
-                    "offset": text.index("второй"),
-                    "length": len("второй"),
-                    "url": "https://example.com/second",
-                },
-                {
-                    "type": "text_link",
-                    "offset": text.index("Источник"),
-                    "length": len("Источник"),
-                    "url": "https://t.me/source/123",
-                },
-            ],
-        }
+@pytest.mark.asyncio
+async def test_album_photo_without_text_is_ignored() -> None:
+    message = SimpleNamespace(
+        chat=SimpleNamespace(id=-1001, username=None, title="Parser", type="supergroup"),
+        text=None,
+        caption=None,
+        message_id=18,
+        media_group_id="album-1",
+        author_signature=None,
+        bot=AsyncMock(),
+        video=None,
+        video_note=None,
+        document=None,
+        audio=None,
+        voice=None,
+        entities=None,
+        caption_entities=None,
     )
+    pipeline = AsyncMock()
 
-    author, _, source_url, extra_materials = parse_inbox_content(message)
+    await process_inbox_message(message, pipeline, AsyncMock(), get_settings())
 
-    assert author == "#Trader8020"
-    assert source_url == "https://t.me/source/123"
-    assert extra_materials == 2
+    pipeline.ingest.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_source_only_album_item_is_ignored() -> None:
+    message = SimpleNamespace(
+        chat=SimpleNamespace(id=-1001, username=None, title="Parser", type="supergroup"),
+        text=None,
+        caption="🔗Источник",
+        message_id=19,
+        media_group_id="album-1",
+        author_signature=None,
+        bot=AsyncMock(),
+        video=None,
+        video_note=None,
+        document=None,
+        audio=None,
+        voice=None,
+        entities=None,
+        caption_entities=None,
+    )
+    pipeline = AsyncMock()
+
+    await process_inbox_message(message, pipeline, AsyncMock(), get_settings())
+
+    pipeline.ingest.assert_not_awaited()

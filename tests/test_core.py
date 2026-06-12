@@ -104,13 +104,12 @@ def test_card_uses_short_media_notes() -> None:
         summary="Краткое описание.",
         content="",
         media_type="voice",
-        extra_materials=2,
         url="https://t.me/source/1",
         relevance=1,
         status="new",
     )
 
-    assert media_notes(item) == "🎙 Голосовое сообщение\n📥 Два дополнительных материала"
+    assert media_notes(item) == "🎙 Голосовое сообщение"
     card = format_card(item)
     assert "#Trader8020 | Обзор рынка | Пост TG" in card
     assert "прикреплено голосовое" not in card

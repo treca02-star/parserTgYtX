@@ -65,7 +65,12 @@ def telegram_message_url(message: Message) -> str:
     return ""
 
 
-def parse_inbox_content(message: Message) -> tuple[str, str, str, int]:
+def is_source_label(value: str) -> bool:
+    normalized = re.sub(r"[^\w]+", "", value, flags=re.UNICODE).casefold()
+    return normalized == "источник"
+
+
+def parse_inbox_content(message: Message) -> tuple[str, str, str]:
     content = message.text or message.caption or ""
     lines = content.splitlines()
     author = message.author_signature or message.chat.title or "Telegram"
@@ -76,7 +81,6 @@ def parse_inbox_content(message: Message) -> tuple[str, str, str, int]:
             lines = lines[1:]
 
     source_url = ""
-    material_urls: set[str] = set()
     entities = message.entities if message.text is not None else message.caption_entities
     for entity in entities or []:
         label = entity.extract_from(content).strip()
@@ -85,16 +89,14 @@ def parse_inbox_content(message: Message) -> tuple[str, str, str, int]:
             entity_url = label
         if not entity_url:
             continue
-        if label.casefold() == "источник":
+        if is_source_label(label):
             source_url = entity_url
-        else:
-            material_urls.add(entity_url)
 
     while lines and not lines[-1].strip():
         lines.pop()
-    if lines and lines[-1].strip().casefold() == "источник":
+    if lines and is_source_label(lines[-1]):
         lines.pop()
-    return author, "\n".join(lines).strip(), source_url, len(material_urls)
+    return author, "\n".join(lines).strip(), source_url
 
 
 @router.message(CommandStart())
@@ -442,7 +444,15 @@ async def process_inbox_message(
                 message.migrate_from_chat_id,
             )
         return
-    author, content, source_url, extra_materials = parse_inbox_content(message)
+    author, content, source_url = parse_inbox_content(message)
+    if not content:
+        logger.info(
+            "Ignored Telegram message without text chat=%s message=%s media_group=%s",
+            message.chat.id,
+            message.message_id,
+            message.media_group_id,
+        )
+        return
     url = source_url or telegram_message_url(message)
     if not url:
         try:
@@ -459,7 +469,6 @@ async def process_inbox_message(
             external_id=f"{message.chat.id}:{message.message_id}",
             author=author,
             content=content,
-            extra_materials=extra_materials,
             media_type=(
                 "video"
                 if (
