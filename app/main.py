@@ -19,6 +19,11 @@ from app.services.content import ContentPipeline
 from app.services.deferred import deferred_reminder_loop
 from app.services.downloader import MediaDownloader
 from app.services.openai_filter import ContentAnalyzer
+from app.services.substack import SubstackService
+from app.services.substack_poller import (
+    ensure_substack_source,
+    poll_all_substack_sources,
+)
 from app.services.youtube import YouTubeService, parse_feed
 from app.services.youtube_poller import mode_accepts, poll_all_sources
 
@@ -28,6 +33,7 @@ bot = Bot(settings.telegram_bot_token, default=DefaultBotProperties(parse_mode=P
 dispatcher = Dispatcher(storage=MemoryStorage())
 dispatcher.include_router(router)
 youtube = YouTubeService(settings.youtube_callback_url)
+substack = SubstackService()
 analyzer = ContentAnalyzer(
     settings.ai_api_key,
     settings.ai_model,
@@ -38,6 +44,7 @@ downloader = MediaDownloader(bot, settings)
 session_dependency = Depends(get_session)
 polling_task: asyncio.Task[None] | None = None
 deferred_reminder_task: asyncio.Task[None] | None = None
+substack_polling_task: asyncio.Task[None] | None = None
 
 
 class DependenciesMiddleware(BaseMiddleware):
@@ -58,13 +65,18 @@ dispatcher.update.outer_middleware(DependenciesMiddleware())
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):  # type: ignore[no-untyped-def]
-    global deferred_reminder_task, polling_task
+    global deferred_reminder_task, polling_task, substack_polling_task
     await bot.set_webhook(
         settings.telegram_webhook_url,
         secret_token=settings.telegram_webhook_secret,
         allowed_updates=dispatcher.resolve_used_update_types(),
     )
     async with SessionFactory() as session:
+        await ensure_substack_source(
+            session,
+            settings.substack_feed_url,
+            settings.substack_author,
+        )
         sources = (
             await session.scalars(
                 select(Source).where(
@@ -79,6 +91,7 @@ async def lifespan(app: FastAPI):  # type: ignore[no-untyped-def]
         except Exception:
             logging.exception("Could not renew YouTube subscription for %s", source.external_id)
     polling_task = asyncio.create_task(youtube_polling_loop())
+    substack_polling_task = asyncio.create_task(substack_polling_loop())
     deferred_reminder_task = asyncio.create_task(
         deferred_reminder_loop(bot, SessionFactory, settings)
     )
@@ -87,6 +100,9 @@ async def lifespan(app: FastAPI):  # type: ignore[no-untyped-def]
         polling_task.cancel()
     if deferred_reminder_task:
         deferred_reminder_task.cancel()
+    if substack_polling_task:
+        substack_polling_task.cancel()
+    await substack.close()
     await bot.session.close()
 
 
@@ -94,6 +110,13 @@ async def youtube_polling_loop() -> None:
     while True:
         async with SessionFactory() as session:
             await poll_all_sources(session, youtube, pipeline)
+        await asyncio.sleep(120)
+
+
+async def substack_polling_loop() -> None:
+    while True:
+        async with SessionFactory() as session:
+            await poll_all_substack_sources(session, substack, pipeline)
         await asyncio.sleep(120)
 
 

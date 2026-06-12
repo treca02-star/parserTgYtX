@@ -81,7 +81,10 @@ def format_card(
         state = ""
     if item.is_ad:
         return f"<b>{escape(item.author)} | Рекламный пост</b>{state}"
-    type_name = "YouTube" if item.kind == "youtube" else "Пост TG"
+    type_name = {
+        "youtube": "YouTube",
+        "substack": "Эссе",
+    }.get(item.kind, "Пост TG")
     source = (
         f'\n\n<a href="{escape(item.url, quote=True)}">Источник</a>'
         if item.url
@@ -119,6 +122,7 @@ class ContentPipeline:
         except Exception:
             logger.exception("AI analysis failed; delivering item with fallback metadata")
             analysis = self.analyzer_fallback(incoming)
+        should_deliver = analysis.relevant or incoming.kind == "substack"
         item = ContentItem(
             kind=incoming.kind,
             external_id=incoming.external_id,
@@ -133,7 +137,7 @@ class ContentPipeline:
             source_chat_id=incoming.source_chat_id,
             source_message_id=incoming.source_message_id,
             relevance=analysis.score,
-            status="new" if analysis.relevant else "filtered",
+            status="new" if should_deliver else "filtered",
         )
         session.add(item)
         try:
@@ -141,7 +145,7 @@ class ContentPipeline:
         except IntegrityError:
             await session.rollback()
             return None
-        if analysis.relevant:
+        if should_deliver:
             message = await self.bot.send_message(
                 self.settings.telegram_owner_id,
                 format_card(item),

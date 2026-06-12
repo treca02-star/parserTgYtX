@@ -20,6 +20,8 @@ class Settings(BaseSettings):
     database_url: str
     default_filter_mode: Literal["all", "soft", "medium", "strict"] = "medium"
     default_filter_prompt: str = ""
+    substack_feed_url: str = ""
+    substack_author: str = "#Arthur_Hayes"
     log_level: str = "INFO"
 
     @property

@@ -33,6 +33,13 @@ class FakeAdAnalyzer:
         return AnalysisResult(True, 0.1, "Реклама", "Описание", True)
 
 
+class FakeFilteredAnalyzer:
+    async def analyze(
+        self, item: NormalizedItem, mode: str, custom_prompt: str
+    ) -> AnalysisResult:
+        return AnalysisResult(False, 0.1, "Essay", "Summary", category="Мнение автора")
+
+
 @pytest.fixture
 async def session_factory():
     engine = create_async_engine("sqlite+aiosqlite:///:memory:")
@@ -63,6 +70,30 @@ async def test_ingest_deduplicates_items(session_factory) -> None:
     assert first is not None
     assert duplicate is None
     bot.send_message.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_substack_essay_is_delivered_even_below_filter_threshold(
+    session_factory,
+) -> None:
+    bot = AsyncMock()
+    bot.send_message.return_value = SimpleNamespace(message_id=102)
+    pipeline = ContentPipeline(bot, FakeFilteredAnalyzer(), get_settings())  # type: ignore[arg-type]
+    incoming = NormalizedItem(
+        kind="substack",
+        external_id="essay-1",
+        author="#Arthur_Hayes",
+        title_hint="Essay",
+        content="Full essay",
+        url="https://example.substack.com/p/essay",
+    )
+
+    async with session_factory() as session:
+        item = await pipeline.ingest(session, incoming)
+
+    assert item is not None
+    assert item.status == "new"
+    assert "| Эссе</b>" in bot.send_message.await_args.args[1]
 
 
 @pytest.mark.asyncio

@@ -44,6 +44,24 @@ class YouTubeSeen(Base):
     )
 
 
+class SubstackSeen(Base):
+    __tablename__ = "substack_seen"
+    __table_args__ = (
+        UniqueConstraint(
+            "source_id",
+            "external_id",
+            name="uq_substack_seen_source_entry",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    source_id: Mapped[int] = mapped_column()
+    external_id: Mapped[str] = mapped_column(String(500))
+    seen_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+
+
 class ContentItem(Base):
     __tablename__ = "items"
     __table_args__ = (UniqueConstraint("kind", "external_id", name="uq_item_kind_external"),)
