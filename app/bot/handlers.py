@@ -1,6 +1,7 @@
 import logging
 import re
 from datetime import UTC, datetime
+from io import BytesIO
 from typing import cast
 
 from aiogram import F, Router
@@ -9,6 +10,7 @@ from aiogram.filters import CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import (
+    BufferedInputFile,
     CallbackQuery,
     InlineKeyboardButton,
     InlineKeyboardMarkup,
@@ -23,6 +25,7 @@ from app.models import AppSettings, ContentItem, Source
 from app.schemas import NormalizedItem
 from app.services.content import ContentPipeline, format_card, item_keyboard
 from app.services.downloader import DownloadError, MediaDownloader
+from app.services.watermark import WatermarkError, apply_watermark
 from app.services.youtube import YouTubeService
 
 router = Router()
@@ -40,6 +43,7 @@ class Form(StatesGroup):
     youtube_url = State()
     filter_prompt = State()
     deferred_reminder_time = State()
+    watermark_image = State()
 
 
 def allowed(user_id: int | None, settings: Settings) -> bool:
@@ -174,14 +178,86 @@ async def start(message: Message, settings: Settings) -> None:
 
 
 @router.callback_query(F.data == "menu:main")
-async def menu_home(callback: CallbackQuery, settings: Settings) -> None:
+async def menu_home(
+    callback: CallbackQuery,
+    state: FSMContext,
+    settings: Settings,
+) -> None:
     if not allowed(callback.from_user.id, settings):
         await callback.answer("Нет доступа", show_alert=True)
         return
+    await state.clear()
     await callback_message(callback).edit_text(
         "<b>Главное меню</b>", reply_markup=main_menu()
     )
     await callback.answer()
+
+
+@router.callback_query(F.data == "menu:watermark")
+async def menu_watermark(
+    callback: CallbackQuery,
+    state: FSMContext,
+    settings: Settings,
+) -> None:
+    if not allowed(callback.from_user.id, settings):
+        await answer_callback_safely(callback, "Нет доступа", show_alert=True)
+        return
+    await state.set_state(Form.watermark_image)
+    await callback_message(callback).edit_text(
+        "<b>🖼 Водяной знак</b>\n\n"
+        "Отправьте изображение как фото или файл. Я наложу марку в правом верхнем углу.",
+        reply_markup=back_menu(),
+    )
+    await answer_callback_safely(callback)
+
+
+@router.message(Form.watermark_image)
+async def watermark_image(
+    message: Message,
+    state: FSMContext,
+    settings: Settings,
+) -> None:
+    if not allowed(message.from_user.id if message.from_user else None, settings):
+        return
+    image = message.photo[-1] if message.photo else None
+    document = message.document
+    if image is None and (
+        document is None
+        or document.mime_type is None
+        or not document.mime_type.startswith("image/")
+    ):
+        await message.answer(
+            "❌ Нужна картинка. Отправьте ее как фото или файл.",
+            reply_markup=back_menu(),
+        )
+        return
+    if message.bot is None:
+        await message.answer("❌ Бот временно недоступен.")
+        return
+
+    if image:
+        file_id = image.file_id
+    else:
+        assert document is not None
+        file_id = document.file_id
+    filename = (
+        document.file_name
+        if document and document.file_name
+        else "image.jpg"
+    )
+    source = BytesIO()
+    try:
+        await message.bot.download(file_id, destination=source)
+        result = apply_watermark(source.getvalue(), filename)
+        await message.answer_document(
+            BufferedInputFile(result.content, filename=result.filename),
+            caption="✅ Водяной знак добавлен.",
+            reply_markup=main_menu(),
+        )
+        await state.clear()
+    except (WatermarkError, TelegramAPIError) as error:
+        logger.warning("Could not add watermark: %s", error)
+        await message.answer(f"❌ {error}", reply_markup=back_menu())
 
 
 @router.callback_query(F.data == "menu:sources")

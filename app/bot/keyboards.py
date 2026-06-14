@@ -16,6 +16,12 @@ def main_menu() -> InlineKeyboardMarkup:
                 InlineKeyboardButton(text="📊 Статистика", callback_data="menu:stats"),
                 InlineKeyboardButton(text="⚙️ Настройки", callback_data="menu:settings"),
             ],
+            [
+                InlineKeyboardButton(
+                    text="🖼 Водяной знак",
+                    callback_data="menu:watermark",
+                )
+            ],
         ]
     )
 
