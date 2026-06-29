@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     telegram_inbox_chat_id: int
     telegram_output_chat_id: int
     telegram_webhook_secret: str = Field(min_length=16)
+    telegram_update_mode: Literal["webhook", "polling"] = "webhook"
     public_base_url: HttpUrl
     ai_api_key: str
     ai_base_url: HttpUrl = HttpUrl("https://openrouter.ai/api/v1")

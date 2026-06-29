@@ -45,6 +45,7 @@ session_dependency = Depends(get_session)
 polling_task: asyncio.Task[None] | None = None
 deferred_reminder_task: asyncio.Task[None] | None = None
 substack_polling_task: asyncio.Task[None] | None = None
+telegram_polling_task: asyncio.Task[None] | None = None
 
 
 class DependenciesMiddleware(BaseMiddleware):
@@ -65,12 +66,21 @@ dispatcher.update.outer_middleware(DependenciesMiddleware())
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):  # type: ignore[no-untyped-def]
-    global deferred_reminder_task, polling_task, substack_polling_task
-    await bot.set_webhook(
-        settings.telegram_webhook_url,
-        secret_token=settings.telegram_webhook_secret,
-        allowed_updates=dispatcher.resolve_used_update_types(),
-    )
+    global deferred_reminder_task, polling_task, substack_polling_task, telegram_polling_task
+    if settings.telegram_update_mode == "polling":
+        await bot.delete_webhook(drop_pending_updates=False)
+        telegram_polling_task = asyncio.create_task(
+            dispatcher.start_polling(
+                bot,
+                allowed_updates=dispatcher.resolve_used_update_types(),
+            )
+        )
+    else:
+        await bot.set_webhook(
+            settings.telegram_webhook_url,
+            secret_token=settings.telegram_webhook_secret,
+            allowed_updates=dispatcher.resolve_used_update_types(),
+        )
     async with SessionFactory() as session:
         await ensure_substack_source(
             session,
@@ -102,6 +112,8 @@ async def lifespan(app: FastAPI):  # type: ignore[no-untyped-def]
         deferred_reminder_task.cancel()
     if substack_polling_task:
         substack_polling_task.cancel()
+    if telegram_polling_task:
+        telegram_polling_task.cancel()
     await substack.close()
     await bot.session.close()
 
