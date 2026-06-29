@@ -17,6 +17,26 @@ from app.services.openai_filter import ContentAnalyzer
 logger = logging.getLogger(__name__)
 
 
+async def get_or_create_app_settings(session: AsyncSession, settings: Settings) -> AppSettings:
+    app_settings = await session.get(AppSettings, 1)
+    if app_settings is not None:
+        return app_settings
+    app_settings = AppSettings(
+        id=1,
+        filter_mode=settings.default_filter_mode,
+        filter_prompt=settings.default_filter_prompt,
+    )
+    session.add(app_settings)
+    try:
+        await session.flush()
+    except IntegrityError:
+        await session.rollback()
+        app_settings = await session.get(AppSettings, 1)
+        if app_settings is None:
+            raise
+    return app_settings
+
+
 def media_notes(item: ContentItem) -> str:
     notes = []
     if item.media_type == "voice":
@@ -106,15 +126,7 @@ class ContentPipeline:
         self.settings = settings
 
     async def ingest(self, session: AsyncSession, incoming: NormalizedItem) -> ContentItem | None:
-        app_settings = await session.get(AppSettings, 1)
-        if app_settings is None:
-            app_settings = AppSettings(
-                id=1,
-                filter_mode=self.settings.default_filter_mode,
-                filter_prompt=self.settings.default_filter_prompt,
-            )
-            session.add(app_settings)
-            await session.flush()
+        app_settings = await get_or_create_app_settings(session, self.settings)
         try:
             analysis = await self.analyzer.analyze(
                 incoming, app_settings.filter_mode, app_settings.filter_prompt

@@ -17,6 +17,7 @@ from aiogram.types import (
     Message,
 )
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot.keyboards import back_menu, filter_menu, main_menu, settings_menu, sources_menu
@@ -395,7 +396,13 @@ async def ensure_app_settings(session: AsyncSession, settings: Settings) -> AppS
             filter_prompt=settings.default_filter_prompt,
         )
         session.add(value)
-        await session.commit()
+        try:
+            await session.commit()
+        except IntegrityError:
+            await session.rollback()
+            value = await session.get(AppSettings, 1)
+            if value is None:
+                raise
     return value
 
 
